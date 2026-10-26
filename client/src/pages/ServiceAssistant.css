@@ -1,0 +1,999 @@
+.gs-assistant {
+  background: #f6f8f8;
+  color: #193d46;
+  padding: 0 0 15px;
+}
+.gs-assistant__intro {
+  padding-top: 44px;
+  padding-bottom: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+}
+.gs-assistant__intro .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.gs-assistant__intro h1 {
+  font-size: 39px;
+  letter-spacing: -1.4px;
+  line-height: 1.15;
+  margin: 13px 0;
+}
+.gs-assistant__intro h1 > span {
+  color: #087f8c;
+}
+.gs-assistant__intro > div > p {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #647b83;
+  max-width: 620px;
+}
+.gs-assistant__mode {
+  border: 1px solid #dce7e5;
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 240px;
+  max-width: 285px;
+}
+.gs-assistant__mode > span {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #d5a45b;
+  margin-top: 5px;
+}
+.gs-assistant__mode > span.is-live {
+  background: #278963;
+}
+.gs-assistant__mode strong {
+  display: block;
+  font-size: 12px;
+}
+.gs-assistant__mode small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.8;
+  color: #74898f;
+  margin-top: 5px;
+}
+.gs-assistant__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+.gs-assistant__conversation {
+  background: white;
+  border: 1px solid #dee8e8;
+  border-radius: 18px;
+  overflow: hidden;
+  min-width: 0;
+}
+.gs-assistant__chat-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 21px 23px;
+  border-bottom: 1px solid #e8eeee;
+  background: #fbfdfc;
+}
+.gs-assistant__chat-head > span {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: #eaf5f1;
+  color: #087f8c;
+  border-radius: 12px;
+}
+.gs-assistant__chat-head > div {
+  flex: 1;
+  min-width: 0;
+}
+.gs-assistant__chat-head h2 {
+  font-size: 15px;
+  letter-spacing: -0.2px;
+}
+.gs-assistant__chat-head p {
+  font-size: 11px;
+  color: #768b91;
+  margin-top: 5px;
+}
+.gs-assistant__chat-head > button {
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  color: #647e85;
+}
+.gs-assistant__messages {
+  padding: 23px;
+  display: grid;
+  gap: 15px;
+  max-height: 600px;
+  overflow: auto;
+}
+.gs-assistant__bubble {
+  background: #f1f7f5;
+  border: 1px solid #e2ece7;
+  border-radius: 2px 13px 13px 13px;
+  padding: 16px 17px;
+  color: #4d6c75;
+  font-size: 12px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+.gs-assistant__bubble.is-user {
+  background: #087f8c;
+  color: white;
+  border-color: #087f8c;
+  margin-left: 35px;
+  border-radius: 13px 2px 13px 13px;
+}
+.gs-assistant__bubble p {
+  color: inherit;
+}
+.gs-assistant__speaker {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  color: #087580;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+.gs-assistant__bubble.is-user .gs-assistant__speaker {
+  color: #d4eff1;
+}
+.gs-assistant__bubble p + p {
+  margin-top: 11px;
+}
+.gs-assistant__bubble small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.8;
+  color: #778a8d;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #dbe8e2;
+}
+.gs-assistant__bubble ul {
+  padding-left: 18px;
+  margin-top: 10px;
+}
+.gs-assistant__thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #557b84;
+}
+.gs-assistant__thinking svg {
+  animation: gs-assistant-spin 1s linear infinite;
+}
+.gs-assistant__starters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  padding: 0 23px 24px;
+}
+.gs-assistant__starters button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #dce7e8;
+  border-radius: 9px;
+  padding: 12px;
+  text-align: left;
+  font-size: 10px;
+  color: #57757e;
+  line-height: 1.65;
+}
+.gs-assistant__starters svg {
+  flex-shrink: 0;
+  color: #087f8c;
+}
+.gs-assistant__starters button:hover {
+  border-color: #81b4b9;
+  background: #f1f9f6;
+}
+.gs-assistant__composer {
+  padding: 21px 23px;
+  border-top: 1px solid #e7eeee;
+  background: #fbfcfc;
+}
+.gs-assistant__composer > label {
+  font-size: 11px;
+  font-weight: 650;
+  display: block;
+  margin-bottom: 9px;
+}
+.gs-assistant__composer textarea {
+  width: 100%;
+  background: white;
+  border: 1px solid #d7e4e6;
+  border-radius: 10px;
+  resize: vertical;
+  padding: 13px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: #284d59;
+}
+.gs-assistant__composer > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+.gs-assistant__composer > div > small {
+  font-size: 10px;
+  color: #83969b;
+}
+.gs-assistant__composer .btn {
+  font-size: 11px;
+}
+.gs-assistant__composer .gs-assistant__ai-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.8;
+  color: #72888e;
+  margin-top: 17px;
+}
+.gs-assistant__ai-choice input {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 3px;
+  accent-color: #087f8c;
+}
+.gs-assistant__results {
+  border: 1px solid #dfe8e7;
+  border-radius: 18px;
+  background: white;
+  padding: 24px;
+  min-width: 0;
+}
+.gs-assistant__results-title h2 {
+  font-size: 23px;
+  letter-spacing: -0.6px;
+  line-height: 1.3;
+  margin: 11px 0;
+}
+.gs-assistant__results-title > p {
+  font-size: 11px;
+  line-height: 1.85;
+  color: #778c92;
+}
+.gs-assistant__filters {
+  margin: 21px 0;
+}
+.gs-assistant__filters label {
+  display: block;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 650;
+  color: #526f78;
+}
+.gs-assistant__filters select,
+.gs-assistant__filters input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  background: white;
+  border: 1px solid #dce7e9;
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin-top: 7px;
+  color: #365965;
+  font-size: 12px;
+}
+.gs-assistant__filters > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+.gs-assistant__filters > .btn {
+  font-size: 11px;
+}
+.gs-assistant__providers {
+  display: grid;
+  gap: 15px;
+}
+.gs-assistant__provider {
+  padding: 17px;
+  border: 1px solid #deebe7;
+  border-radius: 12px;
+  background: #fcfefd;
+  min-width: 0;
+}
+.gs-assistant__provider > div:first-child {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.gs-assistant__provider h3 {
+  font-size: 14px;
+}
+.gs-assistant__provider > div > div {
+  min-width: 0;
+}
+.gs-assistant__provider p {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #7d9297;
+  margin-top: 6px;
+}
+.gs-assistant__provider ul {
+  list-style: none;
+  padding: 12px 0;
+  margin: 12px 0;
+  border-top: 1px solid #e6efeb;
+  border-bottom: 1px solid #e6efeb;
+  display: grid;
+  gap: 6px;
+}
+.gs-assistant__provider li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #64827b;
+}
+.gs-assistant__provider li > svg {
+  flex-shrink: 0;
+  color: #398968;
+}
+.gs-assistant__provider > div:nth-of-type(2) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.gs-assistant__provider small {
+  display: block;
+  font-size: 9px;
+  color: #8a9b9e;
+  margin-bottom: 4px;
+}
+.gs-assistant__provider strong {
+  font-size: 20px;
+  color: #244b55;
+}
+.gs-assistant__provider > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #087580;
+  margin-top: 13px;
+}
+.gs-assistant__how {
+  display: flex;
+  gap: 13px;
+  padding: 20px;
+  background: #f1f7f5;
+  border-radius: 11px;
+  margin-top: 23px;
+}
+.gs-assistant__how > span {
+  flex-shrink: 0;
+  color: #087f8c;
+}
+.gs-assistant__how h3 {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.gs-assistant__how p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #738c91;
+}
+.gs-assistant__empty {
+  padding: 23px 12px;
+  text-align: center;
+  color: #66818a;
+}
+.gs-assistant__empty svg {
+  color: #087f8c;
+  margin: 0 auto 12px;
+}
+.gs-assistant__empty h3 {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.gs-assistant__empty p {
+  font-size: 11px;
+  line-height: 1.8;
+}
+.gs-assistant__empty a {
+  display: inline-flex;
+  font-size: 11px;
+  color: #087580;
+  align-items: center;
+  gap: 6px;
+  margin-top: 15px;
+}
+.gs-assistant__error {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #a0473b;
+  background: #fff3f0;
+  border: 1px solid #efdbd4;
+  border-radius: 10px;
+  padding: 13px;
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}
+.gs-assistant__safety {
+  padding: 20px;
+  background: #fff7e9;
+  border: 1px solid #efdcb6;
+  border-radius: 12px;
+  margin: 20px 0;
+  color: #826228;
+}
+.gs-assistant__safety h3 {
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+.gs-assistant__safety p {
+  font-size: 12px;
+  line-height: 1.85;
+}
+.gs-assistant__safety a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 15px;
+  font-size: 11px;
+  text-decoration: underline;
+}
+.gs-assistant__bottom {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding-top: 30px;
+  padding-bottom: 30px;
+  color: #6c858b;
+}
+.gs-assistant__bottom > svg {
+  flex-shrink: 0;
+  color: #609087;
+  margin-top: 2px;
+}
+.gs-assistant__bottom > p {
+  font-size: 11px;
+  line-height: 1.8;
+  flex: 1;
+}
+.gs-assistant__bottom a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #087580;
+}
+.gs-assistant__booking-wrap {
+  scroll-margin-top: 100px;
+  padding-top: 30px;
+}
+.gs-assistant__booking,
+.gs-assistant__receipt {
+  background: white;
+  border: 1px solid #dbe8e5;
+  border-radius: 17px;
+  padding: 27px;
+}
+.gs-assistant__booking-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 23px;
+}
+.gs-assistant__booking-head h2 {
+  font-size: 25px;
+  letter-spacing: -0.7px;
+  margin: 9px 0;
+}
+.gs-assistant__booking-head p {
+  font-size: 12px;
+  color: #789095;
+}
+.gs-assistant__booking-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+}
+.gs-assistant__booking label {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  margin: 15px 0 8px;
+  color: #4b6a74;
+}
+.gs-assistant__booking input,
+.gs-assistant__booking textarea,
+.gs-assistant__booking select {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d7e5e7;
+  border-radius: 9px;
+  font-size: 13px;
+  background: white;
+  color: #355965;
+}
+.gs-assistant__booking textarea {
+  resize: vertical;
+  line-height: 1.7;
+}
+.gs-assistant__slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 12px;
+}
+.gs-assistant__slots button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px;
+  border: 1px solid #d6e5e5;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #5f7e88;
+}
+.gs-assistant__slots [aria-pressed="true"] {
+  background: #087f8c;
+  color: white;
+  border-color: #087f8c;
+}
+.gs-assistant__slots p {
+  font-size: 12px;
+  color: #7d9296;
+  line-height: 1.8;
+}
+.gs-assistant__booking-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-top: 23px;
+  padding-top: 20px;
+  border-top: 1px solid #e7eeed;
+}
+.gs-assistant__booking-actions p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #6f8b88;
+}
+.gs-assistant__review {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 21px;
+  border: 1px solid #dfebe7;
+  border-radius: 11px;
+}
+.gs-assistant__review dt {
+  font-size: 10px;
+  color: #8a9c9f;
+  margin-bottom: 7px;
+}
+.gs-assistant__review dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.gs-assistant__review small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: #7e9499;
+  margin-top: 6px;
+}
+.gs-assistant__review-note {
+  font-size: 11px;
+  line-height: 1.9;
+  color: #7b8e95;
+  margin: 17px 0;
+}
+.gs-assistant__receipt {
+  max-width: 720px;
+  margin: auto;
+  text-align: center;
+  padding: 32px;
+}
+.gs-assistant__receipt > svg {
+  color: #248563;
+  margin: 0 auto 16px;
+}
+.gs-assistant__receipt h2 {
+  font-size: 28px;
+  margin-bottom: 14px;
+}
+.gs-assistant__receipt p {
+  font-size: 13px;
+  line-height: 1.85;
+  color: #71868d;
+}
+.gs-assistant__receipt > strong {
+  display: block;
+  font-size: 13px;
+  margin: 20px;
+}
+.gs-assistant__receipt .btn {
+  display: inline-flex;
+}
+.gs-assistant :is(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid #087f8c;
+  outline-offset: 3px;
+}
+@keyframes gs-assistant-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gs-assistant__thinking svg {
+    animation: none;
+  }
+}
+@media (max-width: 1000px) {
+  .gs-assistant__intro {
+    gap: 25px;
+  }
+  .gs-assistant__intro h1 {
+    font-size: 34px;
+  }
+  .gs-assistant__layout {
+    gap: 18px;
+  }
+  .gs-assistant__conversation .gs-assistant__chat-head,
+  .gs-assistant__messages,
+  .gs-assistant__results {
+    padding: 20px;
+  }
+  .gs-assistant__starters {
+    grid-template-columns: 1fr;
+  }
+  .gs-assistant__intro > div > p {
+    max-width: 520px;
+  }
+  .gs-assistant__mode {
+    min-width: 220px;
+  }
+}
+@media (max-width: 800px) {
+  .gs-assistant__intro {
+    display: block;
+    padding-top: 31px;
+  }
+  .gs-assistant__mode {
+    margin-top: 20px;
+    max-width: none;
+    display: inline-flex;
+  }
+  .gs-assistant__layout {
+    grid-template-columns: 1fr;
+  }
+  .gs-assistant__messages {
+    max-height: 520px;
+  }
+  .gs-assistant__starters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .gs-assistant__booking-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .gs-assistant__bottom {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 480px) {
+  .gs-assistant__intro h1 {
+    font-size: 29px;
+    letter-spacing: -1px;
+  }
+  .gs-assistant__intro > div > p {
+    font-size: 12px;
+  }
+  .gs-assistant__results-title h2 {
+    font-size: 22px;
+  }
+  .gs-assistant__chat-head h2 {
+    font-size: 13px;
+  }
+  .gs-assistant__chat-head {
+    gap: 9px;
+  }
+  .gs-assistant__chat-head > span {
+    width: 34px;
+    height: 34px;
+  }
+  .gs-assistant__starters {
+    grid-template-columns: 1fr;
+    padding: 0 18px 20px;
+  }
+  .gs-assistant__composer {
+    padding: 18px;
+  }
+  .gs-assistant__composer textarea,
+  .gs-assistant__filters input,
+  .gs-assistant__filters select,
+  .gs-assistant__booking input,
+  .gs-assistant__booking select,
+  .gs-assistant__booking textarea {
+    font-size: 16px;
+  }
+  .gs-assistant__provider > div:nth-of-type(2) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .gs-assistant__review {
+    grid-template-columns: 1fr;
+  }
+  .gs-assistant__booking {
+    padding: 20px;
+  }
+  .gs-assistant__booking-head h2 {
+    font-size: 23px;
+  }
+  .gs-assistant__booking-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .gs-assistant__booking-actions > .btn {
+    justify-content: center;
+  }
+  .gs-assistant__filters > div {
+    gap: 10px;
+  }
+  .gs-assistant__bottom a {
+    margin-left: 28px;
+  }
+}
+/* Conversational controls stay within the chat at desktop and phone widths. */
+.gs-assistant--conversational .gs-assistant__layout {
+  grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.85fr);
+}
+.gs-assistant--conversational .gs-assistant__messages {
+  max-height: 440px;
+  overflow-y: auto;
+}
+.gs-assistant--conversational .gs-assistant__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gs-assistant__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 22px;
+}
+.gs-assistant__quick .btn {
+  white-space: normal;
+  text-align: left;
+  min-height: 38px;
+}
+.gs-assistant__notice {
+  margin: 12px 22px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #58737b;
+}
+.gs-assistant__inline-control {
+  display: grid;
+  gap: 8px;
+  margin: 14px 22px;
+  font-size: 13px;
+}
+.gs-assistant__inline-providers {
+  margin: 14px 22px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  align-items: start;
+}
+.gs-assistant__inline-providers > .gs-assistant__notice {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.gs-assistant--conversational .gs-assistant__provider {
+  padding: 14px;
+}
+.gs-assistant--conversational .gs-assistant__provider p,
+.gs-assistant--conversational .gs-assistant__provider li {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.gs-assistant--conversational .gs-assistant__provider > div:first-child {
+  display: block;
+}
+.gs-assistant__work {
+  position: relative;
+  height: 150px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.gs-assistant__work img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gs-assistant__work img.work-photo--placeholder {
+  object-fit: contain;
+  background: #edf5f3;
+}
+.gs-assistant__work .cover-caption {
+  left: 7px;
+  bottom: 7px;
+  max-width: calc(100% - 14px);
+  font-size: 10px;
+}
+.gs-assistant--conversational .gs-assistant__provider > div:nth-of-type(2) {
+  flex-wrap: wrap;
+}
+.gs-assistant--conversational
+  .gs-assistant__provider
+  > div:nth-of-type(2)
+  .btn {
+  white-space: normal;
+  min-height: 40px;
+}
+.gs-assistant__inline-booking {
+  padding: 22px;
+  border-top: 1px solid #deebe7;
+  background: #fbfefd;
+}
+.gs-assistant__inline-booking h3 {
+  font-size: 17px;
+  margin: 0 0 10px;
+}
+.gs-assistant__inline-booking p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 14px;
+  overflow-wrap: anywhere;
+}
+.gs-assistant__inline-booking label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  margin: 14px 0 7px;
+}
+.gs-assistant__inline-booking input,
+.gs-assistant__inline-booking textarea {
+  width: 100%;
+  min-width: 0;
+}
+.gs-assistant__inline-booking textarea {
+  display: block;
+  margin-bottom: 14px;
+  resize: vertical;
+}
+.gs-assistant__inline-booking details {
+  margin: 15px 0;
+}
+.gs-assistant__inline-booking summary {
+  cursor: pointer;
+  font-size: 13px;
+  padding: 8px 0;
+}
+.gs-assistant__private-step {
+  border-top: 1px solid #deebe7;
+  margin-top: 18px;
+  padding-top: 20px;
+}
+.gs-assistant__private-step .gs-assistant__quick {
+  padding: 8px 0;
+}
+.gs-assistant__private-step .gs-assistant__review {
+  grid-template-columns: 1fr;
+}
+.gs-assistant--conversational .gs-assistant__review dd {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.gs-assistant--conversational .gs-assistant__booking-actions {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.gs-assistant--conversational .gs-assistant__booking-actions .btn {
+  white-space: normal;
+  min-height: 44px;
+}
+.gs-assistant--conversational .gs-assistant__filters {
+  display: grid;
+  gap: 14px;
+}
+.gs-assistant--conversational .gs-assistant__filters label {
+  margin: 0;
+}
+.gs-assistant--conversational .gs-assistant__filters small {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #58737b;
+}
+.gs-assistant--conversational .gs-assistant__results-title p {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.gs-assistant--conversational button:focus-visible,
+.gs-assistant--conversational summary:focus-visible {
+  outline: 3px solid #0b8a96;
+  outline-offset: 3px;
+}
+.gs-assistant--conversational .gs-assistant__error {
+  margin: 12px 20px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 850px) {
+  .gs-assistant--conversational .gs-assistant__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gs-assistant--conversational .gs-assistant__intro {
+    padding-top: 26px;
+  }
+  .gs-assistant--conversational .gs-assistant__intro h1 {
+    font-size: 30px;
+  }
+}
+@media (max-width: 480px) {
+  .gs-assistant__inline-providers {
+    margin: 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gs-assistant__inline-booking {
+    padding: 17px 12px;
+  }
+  .gs-assistant__quick {
+    padding: 10px 12px;
+  }
+  .gs-assistant--conversational .gs-assistant__booking-actions .btn {
+    flex: 1 1 100%;
+  }
+  .gs-assistant__work {
+    height: 165px;
+  }
+  .gs-assistant--conversational .gs-assistant__messages {
+    max-height: 360px;
+  }
+}
+
+.gs-assistant--conversational .gs-assistant__review dt {
+  font-size: 12px;
+}
+.gs-assistant--conversational .gs-assistant__review dd {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.gs-assistant--conversational .gs-assistant__review dd small {
+  font-size: 12px;
+  line-height: 1.6;
+}

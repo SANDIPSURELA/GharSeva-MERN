@@ -1,0 +1,701 @@
+.gs-pay {
+  color: #2a4e59;
+  min-width: 0;
+}
+.gs-pay p {
+  font-size: 12px;
+  line-height: 1.85;
+  color: #788e96;
+}
+.gs-pay__hero {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  padding: 28px 0;
+}
+.gs-pay__hero > div {
+  flex: 1;
+}
+.gs-pay__hero h2 {
+  font-size: 35px;
+  line-height: 1.2;
+  margin: 13px 0;
+  letter-spacing: -1px;
+}
+.gs-pay__hero em {
+  font-style: normal;
+  color: #087f8c;
+}
+.gs-pay__hero p {
+  max-width: 650px;
+}
+.gs-pay__hero > span {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  background: #e8f5ef;
+  color: #498e73;
+  border-radius: 23px;
+  margin: 0 20px;
+}
+.gs-pay__mode {
+  display: flex;
+  gap: 13px;
+  background: #fff7e8;
+  border: 1px solid #efdfbb;
+  border-radius: 11px;
+  padding: 17px 19px;
+  margin-bottom: 24px;
+  color: #a17d3d;
+}
+.gs-pay__mode svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.gs-pay__mode strong {
+  font-size: 12px;
+  color: #876a36;
+}
+.gs-pay__mode p {
+  font-size: 10px;
+  line-height: 1.9;
+  color: #a18c64;
+  margin-top: 4px;
+}
+.gs-pay__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 17px;
+  margin: 25px 0 30px;
+}
+.gs-pay__stats > div {
+  background: white;
+  border: 1px solid #dfe9e6;
+  border-radius: 13px;
+  padding: 23px;
+}
+.gs-pay__stats small {
+  display: block;
+  font-size: 10px;
+  color: #90a1a5;
+  line-height: 1.8;
+}
+.gs-pay__stats strong {
+  display: block;
+  font-size: 29px;
+  letter-spacing: -1px;
+  color: #315965;
+  margin-top: 10px;
+}
+.gs-pay__tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 26px 0 20px;
+}
+.gs-pay__tools > div {
+  flex: 1;
+}
+.gs-pay h3 {
+  font-size: 20px;
+  line-height: 1.4;
+  letter-spacing: -0.5px;
+}
+.gs-pay__tools p {
+  font-size: 10px;
+  margin-top: 5px;
+}
+.gs-pay__tools select {
+  max-width: 210px;
+  min-width: 0;
+  font-size: 11px;
+  padding: 11px;
+  border: 1px solid #d9e5e5;
+  border-radius: 8px;
+  background: white;
+  color: #63818c;
+}
+.gs-pay .btn {
+  font-size: 11px;
+}
+.gs-pay__list {
+  display: grid;
+  gap: 15px;
+}
+.gs-pay__list article {
+  border: 1px solid #dfebe6;
+  background: #fff;
+  border-radius: 13px;
+  padding: 22px;
+}
+.gs-pay__row-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.gs-pay__row-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: #edf6f2;
+  color: #5b947b;
+  flex-shrink: 0;
+}
+.gs-pay__row-top > div {
+  flex: 1;
+  min-width: 0;
+}
+.gs-pay__row-top small {
+  font-size: 9px;
+  color: #96a5a5;
+}
+.gs-pay__row-top h3 {
+  font-size: 16px;
+  margin: 6px 0;
+}
+.gs-pay__row-top p {
+  font-size: 11px;
+}
+.gs-pay__row-top > strong {
+  font-size: 25px;
+  letter-spacing: -0.7px;
+}
+.gs-pay__row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin: 20px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid #e8eeeb;
+}
+.gs-pay__row-bottom > span:nth-child(2) {
+  font-size: 10px;
+  color: #91a3a2;
+}
+.gs-pay__row-bottom > button {
+  font-size: 10px;
+  margin-left: auto;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.gs-pay__pill {
+  display: inline-block;
+  font-size: 9px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #edf2f3;
+  color: #758d95;
+}
+.gs-pay__pill--captured {
+  background: #e5f4e8;
+  color: #458561;
+}
+.gs-pay__pill--authorized,
+.gs-pay__pill--creating {
+  background: #fff2d8;
+  color: #967d49;
+}
+.gs-pay__pill--refunded,
+.gs-pay__pill--partially_refunded {
+  background: #edf1f9;
+  color: #697fa8;
+}
+.gs-pay__pill--failed {
+  background: #fff0e8;
+  color: #a0795d;
+}
+.gs-pay__refund-flag {
+  font-size: 10px !important;
+  color: #a17d4e !important;
+  background: #fff6e4;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-top: 13px;
+}
+.gs-pay__empty {
+  text-align: center;
+  border: 1px dashed #d5e4dc;
+  background: #f8fbf9;
+  border-radius: 13px;
+  padding: 45px 25px;
+}
+.gs-pay__empty > svg {
+  margin: 0 auto 18px;
+  color: #729d87;
+}
+.gs-pay__empty h3 {
+  font-size: 19px;
+}
+.gs-pay__empty p {
+  font-size: 12px;
+  max-width: 470px;
+  margin: 12px auto;
+}
+.gs-pay__empty .btn {
+  display: inline-flex;
+  margin-top: 12px;
+}
+.gs-pay__pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 13px;
+  margin: 25px 0;
+  font-size: 11px;
+  color: #849a9f;
+}
+.gs-pay__alert,
+.gs-pay__notice {
+  font-size: 12px !important;
+  line-height: 1.85;
+  border: 1px solid #ecd9cc;
+  background: #fff3e9;
+  padding: 14px 17px;
+  border-radius: 9px;
+  color: #a0734d !important;
+  margin: 17px 0;
+  overflow-wrap: anywhere;
+}
+.gs-pay__notice {
+  background: #edf8f0;
+  border-color: #cee7d6;
+  color: #609072 !important;
+}
+.gs-pay__modal .gs-pay__mode {
+  margin: 0 0 22px;
+}
+.gs-pay__modal > h3 {
+  font-size: 22px;
+}
+.gs-pay__modal > p {
+  font-size: 11px;
+  margin-top: 7px;
+}
+.gs-pay .gs-pay__reference {
+  font-size: 10px;
+  color: #90a3a8;
+  margin: 10px 0 22px;
+}
+.gs-pay__breakdown {
+  border: 1px solid #dae7e1;
+  border-radius: 11px;
+  background: #f8fbf9;
+  padding: 7px 18px;
+  margin-top: 20px;
+}
+.gs-pay__breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 13px 0;
+  font-size: 11px;
+  color: #839a9a;
+  line-height: 1.7;
+}
+.gs-pay__breakdown > div + div {
+  border-top: 1px solid #e5eee8;
+}
+.gs-pay__breakdown > div:nth-child(2) {
+  color: #568a71;
+  font-weight: 600;
+}
+.gs-pay__breakdown strong {
+  color: #426a60;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.gs-pay .gs-pay__fine {
+  font-size: 10px;
+  line-height: 1.9;
+  color: #8b9fa2;
+  margin: 15px 0;
+}
+.gs-pay__consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 11px;
+  line-height: 1.85;
+  color: #6a8992;
+  margin: 20px 0;
+}
+.gs-pay__consent input {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  accent-color: #087f8c;
+  margin-top: 2px;
+}
+.gs-pay__simulator {
+  padding: 19px;
+  background: #fff7e8;
+  border: 1px solid #edddbd;
+  border-radius: 10px;
+  margin: 23px 0;
+}
+.gs-pay__simulator > span {
+  font-size: 9px;
+  color: #aa8746;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.gs-pay__simulator h4 {
+  font-size: 14px;
+  margin: 11px 0;
+  color: #897044;
+}
+.gs-pay__simulator p {
+  font-size: 11px;
+  color: #a18d69;
+}
+.gs-pay__simulator > div {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  flex-wrap: wrap;
+  margin-top: 17px;
+}
+.gs-pay__simulator .text-link {
+  font-size: 10px;
+  color: #9c824f;
+}
+.gs-pay__simulator > .text-link {
+  margin-left: 15px;
+}
+.gs-pay__modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 22px 0;
+}
+.gs-pay__modal-actions button {
+  font-size: 10px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.gs-pay__history {
+  font-size: 11px;
+  color: #779098;
+  border-top: 1px solid #e5ede8;
+  padding-top: 18px;
+  margin: 22px 0;
+}
+.gs-pay__history summary {
+  cursor: pointer;
+}
+.gs-pay__history ol {
+  padding-left: 17px;
+  margin-top: 15px;
+}
+.gs-pay__history li {
+  padding-bottom: 12px;
+  line-height: 1.8;
+}
+.gs-pay__history b {
+  font-size: 10px;
+}
+.gs-pay__history small {
+  font-size: 9px;
+  color: #97a7a8;
+  margin-left: 8px;
+}
+.gs-pay__history p {
+  font-size: 10px;
+  margin-top: 5px;
+}
+.gs-pay__receipt {
+  text-align: center;
+  padding: 25px 18px;
+  background: #f5faf6;
+  border: 1px solid #d9e9de;
+  border-radius: 12px;
+  margin: 22px 0;
+}
+.gs-pay__receipt > span {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  background: #e2f1e7;
+  border-radius: 14px;
+  color: #579875;
+  margin: 0 auto 16px;
+}
+.gs-pay__receipt > small {
+  font-size: 8px;
+  color: #91a397;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+.gs-pay__receipt h3 {
+  font-size: 20px;
+  margin: 10px 0;
+}
+.gs-pay__receipt > strong {
+  display: block;
+  font-size: 37px;
+  color: #447b60;
+  letter-spacing: -1px;
+  margin: 15px 0;
+}
+.gs-pay__receipt > p {
+  font-size: 11px;
+}
+.gs-pay__receipt dl {
+  border-top: 1px solid #dfeae2;
+  padding-top: 13px;
+  margin-top: 20px;
+}
+.gs-pay__receipt dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 13px 0;
+  text-align: left;
+  font-size: 10px;
+}
+.gs-pay__receipt dt {
+  color: #94a79e;
+  flex-shrink: 0;
+}
+.gs-pay__receipt dd {
+  font-size: 9px;
+  color: #668a78;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.gs-pay__receipt .btn {
+  margin: 18px auto 0;
+  display: inline-flex;
+}
+.gs-pay :is(a, button, input, select):focus-visible {
+  outline: 3px solid #087f8c;
+  outline-offset: 3px;
+}
+@media (max-width: 800px) {
+  .gs-pay__hero h2 {
+    font-size: 30px;
+  }
+  .gs-pay__hero > span {
+    width: 67px;
+    height: 67px;
+    margin: 0;
+  }
+  .gs-pay__stats {
+    gap: 12px;
+  }
+  .gs-pay__stats > div {
+    padding: 17px;
+  }
+  .gs-pay__stats strong {
+    font-size: 25px;
+  }
+  .gs-pay__tools {
+    flex-wrap: wrap;
+  }
+  .gs-pay__tools > div {
+    flex-basis: 100%;
+  }
+  .gs-pay__tools select {
+    flex: 1;
+    max-width: none;
+  }
+}
+@media (max-width: 500px) {
+  .gs-pay__hero h2 {
+    font-size: 27px;
+    letter-spacing: -0.6px;
+  }
+  .gs-pay__hero > span {
+    display: none;
+  }
+  .gs-pay__hero p {
+    font-size: 11px;
+  }
+  .gs-pay__stats {
+    grid-template-columns: 1fr;
+  }
+  .gs-pay__stats > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .gs-pay__stats strong {
+    margin: 0;
+  }
+  .gs-pay__mode {
+    padding: 15px;
+    gap: 10px;
+  }
+  .gs-pay__list article {
+    padding: 17px;
+  }
+  .gs-pay__row-top {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .gs-pay__row-top > strong {
+    font-size: 22px;
+    margin-left: 55px;
+  }
+  .gs-pay__row-top h3 {
+    font-size: 15px;
+  }
+  .gs-pay__row-bottom > button {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .gs-pay__receipt dl > div {
+    display: block;
+  }
+  .gs-pay__receipt dd {
+    text-align: left;
+    margin-top: 5px;
+  }
+  .gs-pay__breakdown {
+    padding: 7px 12px;
+  }
+  .gs-pay__simulator > div {
+    display: grid;
+    gap: 16px;
+  }
+}
+/* Two-stage billing uses the existing payment palette and compact modal. */
+.gs-pay--stages section,
+.gs-pay--stages .gs-pay__record {
+  margin: 22px 0;
+  padding-top: 18px;
+  border-top: 1px solid #dfe9e6;
+  min-width: 0;
+}
+.gs-pay--stages .gs-pay__stage-state {
+  display: inline-block;
+  background: #e8f5ef;
+  padding: 10px 14px;
+  border-radius: 9px;
+  margin: 10px 0;
+}
+.gs-pay--stages p,
+.gs-pay--stages dd {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.gs-pay--stages h3 {
+  margin: 12px 0;
+}
+.gs-pay__form {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.gs-pay__form label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+}
+.gs-pay__form input,
+.gs-pay__form select,
+.gs-pay__form textarea {
+  min-width: 0;
+  width: 100%;
+}
+.gs-pay__form fieldset {
+  border: 1px solid #dfe9e6;
+  border-radius: 9px;
+  padding: 12px;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+.gs-pay__form legend {
+  font-size: 12px;
+  padding: 0 5px;
+}
+.gs-pay__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+}
+.gs-pay__bill-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e8efed;
+  font-size: 13px;
+}
+.gs-pay__bill-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gs-pay__bill-item small {
+  display: block;
+  color: #58737b;
+  margin-top: 5px;
+}
+.gs-pay__bill-item strong {
+  flex-shrink: 0;
+}
+.gs-pay--stages .gs-pay__breakdown div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 10px 0;
+}
+.gs-pay--stages .gs-pay__breakdown dd {
+  margin: 0;
+  font-weight: 600;
+}
+.gs-pay--stages .gs-pay__row-top {
+  flex-wrap: wrap;
+}
+.gs-pay--stages .gs-pay__row-top > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.gs-pay--stages button {
+  white-space: normal;
+  min-height: 40px;
+}
+.gs-pay--stages details {
+  margin: 18px 0;
+}
+.gs-pay--stages summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.gs-pay--stages .gs-pay__simulator {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.gs-pay--stages .gs-pay__simulator p,
+.gs-pay--stages .gs-pay__simulator > strong {
+  flex-basis: 100%;
+}
+.gs-pay--stages button:focus-visible,
+.gs-pay--stages summary:focus-visible {
+  outline: 3px solid #0b8a96;
+  outline-offset: 3px;
+}
+@media (max-width: 480px) {
+  .gs-pay--stages .gs-pay__row-top > .btn {
+    width: 100%;
+  }
+  .gs-pay--stages .gs-pay__tools {
+    flex-wrap: wrap;
+  }
+  .gs-pay--stages .gs-pay__hero h2 {
+    font-size: 27px;
+  }
+}

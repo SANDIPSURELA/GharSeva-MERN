@@ -1,0 +1,53 @@
+html.gs-session-checking #main-content,
+html.gs-session-checking .header-actions {
+  visibility: hidden;
+  pointer-events: none;
+}
+.gs-session-security {
+  padding: 10px 0;
+  color: var(--ink);
+}
+.gs-session-security p {
+  line-height: 1.6;
+  font-size: 14px;
+}
+.gs-session-security label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+.gs-session-security .gs-session-password input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.gs-session-security .gs-session-password {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 18px;
+}
+.gs-session-security .gs-session-password input {
+  flex: 1;
+}
+.gs-session-security > .text-link {
+  margin-top: 18px;
+}
+.gs-session-security button:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+.gs-session-retry {
+  position: fixed;
+  z-index: 10000;
+  bottom: 20px;
+  left: 16px;
+  right: 16px;
+  padding: 18px;
+  background: white;
+  border: 2px solid var(--orange);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px #152c3b33;
+}

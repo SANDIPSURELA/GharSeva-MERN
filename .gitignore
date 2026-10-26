@@ -1,0 +1,17 @@
+node_modules/
+.env
+server/.env
+client/.env
+client/dist/
+coverage/
+*.log
+.env.*
+!.env.example
+!.env.production.example
+**/*service-account*.json
+**/firebase-adminsdk*.json
+*.pem
+*.key
+
+# Disposable local test databases/logs
+.test-tmp/

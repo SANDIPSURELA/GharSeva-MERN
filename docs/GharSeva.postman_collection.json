@@ -1,0 +1,797 @@
+{
+  "info": {
+    "name": "GharSeva MERN \u2014 Booking Journey",
+    "description": "Run in order with the API at port 5000. Demo data requires npm run demo or npm run seed. Role cookies are stored separately. Writes use X-GharSeva: 1.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "customer_password",
+      "value": "Customer123",
+      "type": "string"
+    },
+    {
+      "key": "provider_password",
+      "value": "Provider123",
+      "type": "string"
+    },
+    {
+      "key": "admin_password",
+      "value": "Admin12345",
+      "type": "string"
+    },
+    {
+      "key": "provider_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "booking_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "visit_code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointment_date",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointment_time",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customer_cookie",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "provider_cookie",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_cookie",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Health",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          }
+        ],
+        "url": "{{base_url}}/health"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"MongoDB connected\", () => pm.expect(pm.response.json().database).to.eql(\"connected\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Discover providers",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          }
+        ],
+        "url": "{{base_url}}/providers"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const p = pm.response.json().find(p => p.name === \"Rajesh Kumar\") || pm.response.json()[0];",
+              "if (p) pm.collectionVariables.set(\"provider_id\", p._id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Log in as customer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identifier\": \"customer@gharseva.com\",\n  \"password\": \"{{customer_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const c = pm.response.headers.get(\"Set-Cookie\"); if(c) pm.collectionVariables.set(\"customer_cookie\", c.split(\";\")[0]);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Log in as provider",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identifier\": \"provider@gharseva.com\",\n  \"password\": \"{{provider_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const c = pm.response.headers.get(\"Set-Cookie\"); if(c) pm.collectionVariables.set(\"provider_cookie\", c.split(\";\")[0]);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Log in as admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identifier\": \"admin@gharseva.com\",\n  \"password\": \"{{admin_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const c = pm.response.headers.get(\"Set-Cookie\"); if(c) pm.collectionVariables.set(\"admin_cookie\", c.split(\";\")[0]);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Find tomorrow slots",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          }
+        ],
+        "url": "{{base_url}}/providers/{{provider_id}}/slots?date={{appointment_date}}"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const d = new Date(Date.now() + 86400000 + 19800000);",
+              "pm.collectionVariables.set(\"appointment_date\", d.toISOString().slice(0, 10));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const slots=pm.response.json().slots; if(slots.length) pm.collectionVariables.set(\"appointment_time\", slots[0]);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Create customer booking",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{customer_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"providerId\": \"{{provider_id}}\",\n  \"date\": \"{{appointment_date}}\",\n  \"time\": \"{{appointment_time}}\",\n  \"address\": \"10 Sample Street, Bengaluru\",\n  \"notes\": \"Postman demonstration: kitchen tap repair\",\n  \"urgency\": \"PRIORITY\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "const b=pm.response.json(); pm.collectionVariables.set(\"booking_id\",b._id); pm.collectionVariables.set(\"visit_code\",b.visitCode); pm.test(\"Starts pending\",()=>pm.expect(b.status).to.eql(\"PENDING\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Provider sees same booking",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{provider_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const b=pm.response.json().find(b=>b._id===pm.collectionVariables.get(\"booking_id\")); pm.test(\"Provider gets booking without OTP\",()=>{pm.expect(b).to.exist;pm.expect(b.visitCode).to.eql(undefined);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Provider accepts",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{provider_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings/{{booking_id}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"ACCEPTED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Provider on the way",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{provider_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings/{{booking_id}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"ON_THE_WAY\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Incorrect OTP is denied",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{provider_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings/{{booking_id}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"code\": \"000000\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Correct OTP starts work",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{provider_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings/{{booking_id}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"code\": \"{{visit_code}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Work started\",()=>pm.expect(pm.response.json().status).to.eql(\"IN_PROGRESS\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Complete service",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{provider_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings/{{booking_id}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Customer sees completion",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{customer_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/bookings"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const b=pm.response.json().find(b=>b._id===pm.collectionVariables.get(\"booking_id\"));pm.test(\"Customer sees completed\",()=>pm.expect(b.status).to.eql(\"COMPLETED\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Submit completed-booking review",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{customer_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/reviews",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingId\": \"{{booking_id}}\",\n  \"rating\": 5,\n  \"feedback\": \"Sample Postman review: clear communication and a tidy repair.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Customer denied admin data",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{customer_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/admin/overview"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Save contact enquiry",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/enquiries",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Sample Sender\",\n  \"email\": \"sender@example.com\",\n  \"mobile\": \"9876599999\",\n  \"subject\": \"Demo enquiry\",\n  \"message\": \"This is a sample enquiry for my college project demonstration.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Admin overview",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{admin_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/admin/overview"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Who am I",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-GharSeva",
+            "value": "1"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{customer_cookie}}"
+          }
+        ],
+        "url": "{{base_url}}/auth/me"
+      },
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"No password hash in response\",()=>pm.expect(pm.response.json().passwordHash).to.eql(undefined));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

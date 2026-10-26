@@ -1,0 +1,856 @@
+.gs-signin {
+  --signin-primary: #087f8c;
+  --signin-ink: #17343b;
+  --signin-muted: #64757a;
+  --signin-border: #dfe7e9;
+  color: var(--signin-ink);
+  background: #f6f8f8;
+  min-height: calc(100svh - 85px);
+  padding: 0 32px;
+}
+
+.gs-signin__layout {
+  max-width: 1056px;
+  margin: 0 auto;
+}
+.gs-signin__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 0 25px;
+  font-size: 11px;
+  color: #748487;
+}
+.gs-signin__back {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: #586d72;
+  font-size: 12px;
+}
+.gs-signin__back:hover {
+  color: var(--signin-primary);
+}
+.gs-signin__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 444px;
+  align-items: center;
+  gap: 80px;
+}
+.gs-signin__story {
+  min-width: 0;
+  padding: 6px 0;
+}
+.gs-signin__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 1.5px;
+  color: var(--signin-primary);
+  margin-bottom: 16px;
+}
+.gs-signin__eyebrow > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e9a451;
+}
+.gs-signin__story h2 {
+  font-size: clamp(31px, 3.1vw, 42px);
+  line-height: 1.13;
+  letter-spacing: -1.8px;
+  font-weight: 740;
+}
+.gs-signin__story h2 > span {
+  color: var(--signin-primary);
+}
+.gs-signin__intro {
+  color: var(--signin-muted);
+  font-size: 13px;
+  line-height: 1.75;
+  max-width: 410px;
+  margin: 16px 0 23px;
+}
+.gs-signin__photo {
+  position: relative;
+  height: 285px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #d7e6e7;
+  isolation: isolate;
+}
+.gs-signin__photo > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 63%;
+}
+.gs-signin__photo::after {
+  content: "";
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(transparent, #092b35a6);
+  z-index: 0;
+  pointer-events: none;
+}
+.gs-signin__photo-label {
+  position: absolute;
+  left: 20px;
+  bottom: 21px;
+  right: 20px;
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  color: white;
+  z-index: 1;
+}
+.gs-signin__photo-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--signin-primary);
+}
+.gs-signin__photo-label strong,
+.gs-signin__photo-label div > span {
+  display: block;
+}
+.gs-signin__photo-label strong {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+.gs-signin__photo-label div > span {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #eef6f6;
+}
+.gs-signin__benefits {
+  display: flex;
+  gap: 25px;
+  margin-top: 20px;
+  font-size: 11px;
+  color: #516b71;
+}
+.gs-signin__benefits > span {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+}
+.gs-signin__benefits svg {
+  color: var(--signin-primary);
+}
+
+.gs-signin__card {
+  background: #fff;
+  border: 1px solid #e4eaea;
+  border-radius: 22px;
+  box-shadow:
+    0 10px 40px #17343b05,
+    0 2px 6px #17343b03;
+  padding: 29px 32px 24px;
+  min-width: 0;
+}
+.gs-signin__card-heading {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  margin-bottom: 17px;
+}
+.gs-signin__welcome-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #edf6f5;
+  color: var(--signin-primary);
+}
+.gs-signin__card-caption {
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 1.1px;
+  color: #5f797e;
+}
+.gs-signin__card h1 {
+  font-size: 29px;
+  font-weight: 730;
+  letter-spacing: -1px;
+  line-height: 1.2;
+}
+.gs-signin__subtitle {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--signin-muted);
+  margin: 8px 0 24px;
+}
+.gs-signin__field {
+  margin-bottom: 18px;
+}
+.gs-signin__field > label,
+.gs-signin__label-row > label {
+  display: block;
+  font-size: 12px;
+  color: #344e55;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.gs-signin__label-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.gs-signin__help-toggle {
+  color: var(--signin-primary);
+  font-size: 11px;
+  padding: 0;
+  line-height: 1.6;
+  font-weight: 600;
+}
+.gs-signin__help-toggle:hover {
+  text-decoration: underline;
+}
+.gs-signin__input-wrap {
+  position: relative;
+  margin-top: 8px;
+}
+.gs-signin__input-wrap > svg {
+  position: absolute;
+  left: 14px;
+  top: 15px;
+  color: #7a9096;
+  pointer-events: none;
+}
+.gs-signin__input-wrap > input {
+  height: 48px;
+  width: 100%;
+  padding: 12px 44px 12px 42px;
+  border: 1px solid #d9e3e5;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--signin-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.gs-signin__input-wrap > input::placeholder {
+  color: #6e8087;
+  font-size: 12px;
+}
+.gs-signin__input-wrap > input:hover {
+  border-color: #b0c6ca;
+}
+.gs-signin__input-wrap > input:focus {
+  border-color: var(--signin-primary);
+  box-shadow: 0 0 0 3px #087f8c13;
+}
+.gs-signin__input-wrap > input[aria-invalid="true"] {
+  border-color: #c75656;
+}
+.gs-signin__visibility {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: #72878c;
+}
+.gs-signin__visibility:hover {
+  color: var(--signin-primary);
+  background: #eff6f6;
+}
+.gs-signin__field--password {
+  margin-bottom: 20px;
+}
+.gs-signin__submit {
+  width: 100%;
+  min-height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--signin-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: 0 3px 7px #087f8c13;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.gs-signin__submit:hover:not(:disabled) {
+  background: #066a76;
+  box-shadow: 0 5px 12px #087f8c20;
+}
+.gs-signin__submit:disabled {
+  opacity: 0.65;
+}
+.gs-signin__secure {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #63787f;
+  margin: 12px 0 22px;
+}
+.gs-signin__secure svg {
+  color: #718d87;
+}
+.gs-signin__join {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  border-top: 1px solid #edf0f0;
+  padding-top: 20px;
+  font-size: 12px;
+  color: var(--signin-muted);
+}
+.gs-signin__join a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 650;
+  color: var(--signin-primary);
+}
+.gs-signin__join a:hover {
+  text-decoration: underline;
+}
+.gs-signin__professional {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  background: #f7fafa;
+  border: 1px solid #e8efee;
+  border-radius: 10px;
+  padding: 13px;
+  margin-top: 19px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.gs-signin__professional:hover {
+  background: #eff7f6;
+  border-color: #bcd8d7;
+}
+.gs-signin__professional-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--signin-primary);
+  background: #e9f3f1;
+  border-radius: 8px;
+}
+.gs-signin__professional > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+.gs-signin__professional strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+.gs-signin__professional small {
+  display: block;
+  font-size: 11px;
+  color: var(--signin-muted);
+  line-height: 1.4;
+}
+.gs-signin__professional > svg {
+  color: var(--signin-primary);
+}
+.gs-signin__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: #62767c;
+  padding: 28px 0 24px;
+  font-size: 11px;
+}
+.gs-signin__footer nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 22px;
+}
+.gs-signin__footer a:hover {
+  color: var(--signin-primary);
+}
+.gs-signin__error {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  background: #fff4f3;
+  border: 1px solid #f2d1cd;
+  border-radius: 9px;
+  padding: 12px;
+  margin-bottom: 18px;
+  color: #a63931;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.gs-signin__error svg {
+  margin-top: 1px;
+}
+.gs-signin__field-error,
+.gs-signin__caps {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 7px;
+  color: #a63931;
+}
+.gs-signin__caps {
+  color: #886214;
+}
+.gs-signin__help {
+  background: #f1f7f7;
+  border: 1px solid #d8e8e7;
+  border-radius: 10px;
+  padding: 13px 14px;
+  margin: -2px 0 18px;
+  font-size: 11px;
+}
+.gs-signin__help strong {
+  display: block;
+  font-size: 12px;
+}
+.gs-signin__help p {
+  font-size: 11px;
+  line-height: 1.65;
+  color: #536c72;
+  margin: 6px 0 9px;
+}
+.gs-signin__help a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--signin-primary);
+  font-weight: 650;
+}
+.gs-signin :is(a, button):focus-visible {
+  outline: 3px solid #0b7e8b;
+  outline-offset: 4px;
+}
+.gs-signin__spinner {
+  animation: gs-signin-spin 0.8s linear infinite;
+}
+@keyframes gs-signin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gs-signin__spinner {
+    animation: none;
+  }
+  .gs-signin * {
+    transition: none;
+  }
+}
+@media (min-width: 1440px) {
+  .gs-signin__topline {
+    padding-top: 32px;
+    padding-bottom: 34px;
+  }
+}
+@media (max-width: 1100px) {
+  .gs-signin__content {
+    grid-template-columns: minmax(0, 1fr) 420px;
+    gap: 40px;
+  }
+  .gs-signin__story h2 {
+    font-size: 35px;
+    letter-spacing: -1.4px;
+  }
+  .gs-signin__photo {
+    height: 260px;
+  }
+  .gs-signin__benefits {
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .gs-signin__card {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+}
+@media (max-width: 850px) {
+  .gs-signin {
+    padding: 0 24px;
+  }
+  .gs-signin__content {
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 26px;
+  }
+  .gs-signin__story h2 {
+    font-size: 29px;
+    letter-spacing: -1px;
+  }
+  .gs-signin__intro {
+    font-size: 12px;
+  }
+  .gs-signin__photo {
+    height: 235px;
+  }
+  .gs-signin__eyebrow {
+    font-size: 8px;
+    letter-spacing: 0.8px;
+  }
+  .gs-signin__benefits {
+    gap: 12px;
+    font-size: 10px;
+  }
+  .gs-signin__photo-label {
+    left: 14px;
+    right: 14px;
+  }
+  .gs-signin__photo-label strong {
+    font-size: 12px;
+  }
+}
+@media (max-width: 730px) {
+  .gs-signin {
+    padding: 0 20px;
+    min-height: calc(100svh - 73px);
+  }
+  .gs-signin__layout {
+    max-width: 444px;
+  }
+  .gs-signin__topline {
+    padding: 22px 0;
+  }
+  .gs-signin__topline > span {
+    display: none;
+  }
+  .gs-signin__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .gs-signin__story {
+    display: none;
+  }
+  .gs-signin__card {
+    width: 100%;
+    padding: 28px 25px 24px;
+    border-radius: 18px;
+  }
+  .gs-signin__card h1 {
+    font-size: 29px;
+  }
+  .gs-signin__card-caption {
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+  .gs-signin__input-wrap > input {
+    font-size: 16px;
+  }
+  .gs-signin__input-wrap > input::placeholder {
+    font-size: 12px;
+  }
+  .gs-signin__field > label,
+  .gs-signin__label-row > label {
+    font-size: 12px;
+  }
+  .gs-signin__help-toggle {
+    font-size: 11px;
+    min-height: 32px;
+    margin: -7px 0;
+  }
+  .gs-signin__submit {
+    min-height: 48px;
+    font-size: 13px;
+  }
+  .gs-signin__subtitle {
+    font-size: 12px;
+  }
+  .gs-signin__secure {
+    font-size: 10px;
+  }
+  .gs-signin__join {
+    font-size: 12px;
+  }
+  .gs-signin__professional strong {
+    font-size: 12px;
+  }
+  .gs-signin__professional small {
+    font-size: 11px;
+  }
+  .gs-signin__footer {
+    flex-direction: column;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px 0;
+  }
+  .gs-signin__footer nav {
+    justify-content: center;
+    gap: 23px;
+  }
+  .gs-signin__footer a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+  }
+}
+@media (max-width: 370px) {
+  .gs-signin {
+    padding: 0 14px;
+  }
+  .gs-signin__card {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .gs-signin__card-caption {
+    font-size: 9px;
+    letter-spacing: 0.7px;
+  }
+  .gs-signin__input-wrap > input {
+    padding-left: 38px;
+  }
+  .gs-signin__input-wrap > input::placeholder {
+    font-size: 10px;
+  }
+  .gs-signin__secure {
+    font-size: 10px;
+  }
+}
+
+/* Public role and method selection use the same sign-in card. */
+.gs-login__roles {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #eff4f3;
+  border-radius: 10px;
+  margin: 20px 0;
+}
+.gs-login__roles a {
+  flex: 1;
+  text-align: center;
+  padding: 10px 7px;
+  color: #667d83;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 7px;
+  line-height: 1.5;
+}
+.gs-login__roles a[aria-current="page"] {
+  background: white;
+  color: #087580;
+  box-shadow: 0 1px 5px #17343b0c;
+}
+.gs-login__roles a[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.65;
+}
+.gs-login-social {
+  margin-bottom: 18px;
+}
+.gs-login-social .gs-signin__error {
+  margin-top: 14px;
+}
+.gs-login__methods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: #f0f4f5;
+  border-radius: 9px;
+  margin: 18px 0 21px;
+}
+.gs-login__methods button {
+  min-width: 0;
+  padding: 10px 5px;
+  font-size: 10px;
+  color: #657d84;
+  border-radius: 6px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.gs-login__methods [aria-pressed="true"] {
+  background: white;
+  color: #087580;
+  box-shadow: 0 1px 4px #17343b0c;
+}
+.gs-recovery .gs-signin__subtitle {
+  margin-bottom: 18px;
+}
+.gs-recovery__notice {
+  font-size: 11px;
+  line-height: 1.85;
+  color: #687e84;
+  margin: 16px 0;
+}
+.gs-recovery__done {
+  text-align: center;
+  padding: 22px 0 5px;
+}
+.gs-recovery__done > svg {
+  color: #1c7a57;
+  margin: 0 auto 17px;
+}
+.gs-recovery__done h2 {
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.gs-recovery__done p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #60767e;
+  margin-bottom: 24px;
+}
+.gs-recovery__confirm {
+  margin-bottom: 22px;
+}
+@media (max-width: 390px) {
+  .gs-login__roles a {
+    font-size: 10px;
+  }
+  .gs-login__methods button {
+    font-size: 9px;
+  }
+}
+
+/* Keep OTP sizing independent of registration/demo-code styles. */
+.gs-login-code {
+  min-width: 0;
+}
+.gs-login-code h2 {
+  font-size: 21px;
+  line-height: 1.3;
+  margin: 20px 0 10px;
+}
+.gs-login-code__destination {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0 0 16px;
+  overflow-wrap: anywhere;
+}
+.gs-login-code__demo {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 1px solid #eedcba;
+  border-radius: 9px;
+  background: #fff7e7;
+  color: #775818;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.gs-login-code__demo strong,
+.gs-login-code__demo span {
+  display: block;
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: normal;
+}
+.gs-login-code__demo span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.gs-login-code form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.gs-login-code .gs-signin__field {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+.gs-login-code .gs-login-code__input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 248px;
+  min-width: 0;
+  height: 46px;
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid #b9cecf;
+  border-radius: 9px;
+  text-align: center;
+  letter-spacing: 0.25em;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  background: #fff;
+}
+.gs-login-code__input:focus-visible {
+  outline: 2px solid #087580;
+  outline-offset: 2px;
+}
+.gs-login-code__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 16px;
+  row-gap: 4px;
+  margin-top: 10px;
+}
+.gs-login-code__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #087580;
+  white-space: normal;
+  text-align: left;
+}
+.gs-login-code__actions button svg {
+  flex-shrink: 0;
+}
+.gs-login-code__actions button:disabled {
+  opacity: 0.6;
+}
+.gs-login-code .gs-register__hint {
+  margin: 0 0 16px;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 390px) {
+  .gs-login-code h2 {
+    font-size: 20px;
+  }
+  .gs-login-code .gs-login-code__input {
+    max-width: 220px;
+  }
+  .gs-login-code__actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+}

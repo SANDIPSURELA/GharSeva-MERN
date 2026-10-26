@@ -1,0 +1,43 @@
+# No service is created until you submit this Blueprint in your own account.
+services:
+  - type: web
+    name: gharseva
+    runtime: node
+    plan: free
+    region: singapore
+    numInstances: 1
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run deploy:check && npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: TRUST_PROXY_HOPS
+        value: 1
+      - key: GHARSEVA_DEMO
+        value: "false"
+      - key: AUTH_DELIVERY_MODE
+        value: live
+      - key: REQUIRE_VERIFIED_REGISTRATION
+        value: "true"
+      - key: REQUIRE_PROVIDER_IDENTITY
+        value: "true"
+      - key: PAYMENTS_MODE
+        value: disabled
+      - key: AUTH_GOOGLE_ENABLED
+        value: "false"
+      - key: AUTH_APPLE_ENABLED
+        value: "false"
+      - key: ASSISTANT_AI_ENABLED
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: IDENTITY_STORAGE_KEY
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: CLIENT_ORIGIN
+        sync: false

@@ -1,0 +1,541 @@
+.gs-invites {
+  color: #234851;
+  padding: 8px 0 25px;
+}
+.gs-invites p {
+  color: #738990;
+  font-size: 12px;
+  line-height: 1.85;
+}
+.gs-invites__hero {
+  display: flex;
+  align-items: center;
+  gap: 35px;
+  padding: 24px 0;
+}
+.gs-invites__hero > div {
+  flex: 1;
+}
+.gs-invites__hero h2 {
+  font-size: 35px;
+  line-height: 1.2;
+  margin: 12px 0;
+  letter-spacing: -1.1px;
+}
+.gs-invites__hero em {
+  font-style: normal;
+  color: #087f8c;
+}
+.gs-invites__hero p {
+  max-width: 650px;
+}
+.gs-invites__hero-icon {
+  width: 90px;
+  height: 90px;
+  border-radius: 25px;
+  background: #e7f4ef;
+  color: #328b77;
+  display: grid;
+  place-items: center;
+  margin: 0 20px;
+}
+.gs-invites__principles {
+  display: flex;
+  gap: 25px;
+  justify-content: space-between;
+  padding: 19px 22px;
+  border: 1px solid #d9e9e2;
+  border-radius: 11px;
+  background: #f1f8f4;
+  margin: 0 0 25px;
+}
+.gs-invites__principles span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: #5e8277;
+}
+.gs-invites__layout {
+  display: grid;
+  grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: 25px;
+}
+.gs-invites__form,
+.gs-invites__records {
+  border: 1px solid #dee8e5;
+  border-radius: 15px;
+  background: white;
+  padding: 24px;
+  min-width: 0;
+}
+.gs-invites__form-icon {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border-radius: 11px;
+  background: #eaf5f2;
+  color: #328977;
+  margin-bottom: 16px;
+}
+.gs-invites h3 {
+  font-size: 20px;
+  letter-spacing: -0.5px;
+  line-height: 1.35;
+}
+.gs-invites__form > p {
+  font-size: 11px;
+  margin: 9px 0 20px;
+}
+.gs-invites label {
+  display: block;
+  font-size: 10px;
+  font-weight: 650;
+  color: #587781;
+  margin: 16px 0 8px;
+}
+.gs-invites input,
+.gs-invites select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 11px;
+  border: 1px solid #d8e5e5;
+  border-radius: 8px;
+  background: white;
+  color: #3c606c;
+  font-size: 12px;
+  margin-top: 7px;
+}
+.gs-invites__roles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 18px 0 22px;
+}
+.gs-invites__roles button {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dce7e4;
+  border-radius: 10px;
+  text-align: left;
+  padding: 14px;
+  color: #6f898b;
+  background: #fdfefd;
+}
+.gs-invites__roles button.is-selected {
+  border-color: #589d90;
+  background: #edf7f2;
+  color: #2e806a;
+  box-shadow: 0 0 0 1px #589d9020;
+}
+.gs-invites__roles strong {
+  font-size: 11px;
+}
+.gs-invites__roles small {
+  font-size: 9px;
+  color: #88a09a;
+}
+.gs-invites__form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.gs-invites__explain {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: #f3f8f5;
+  border-radius: 9px;
+  padding: 14px;
+  margin: 19px 0;
+  color: #6a9b88;
+}
+.gs-invites__explain p {
+  font-size: 10px;
+  line-height: 1.85;
+  color: #7c938b;
+}
+.gs-invites .btn {
+  font-size: 11px;
+}
+.gs-invites__delivery {
+  display: block;
+  text-align: center;
+  color: #91a2a1;
+  font-size: 9px;
+  line-height: 1.8;
+  margin-top: 13px;
+}
+.gs-invites__setup {
+  font-size: 10px !important;
+  border: 1px solid #efdfba;
+  background: #fff8eb;
+  padding: 13px;
+  border-radius: 8px;
+  color: #95773f !important;
+  margin-top: 13px;
+}
+.gs-invites__records-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 5px 0 18px;
+}
+.gs-invites__records-head h3 {
+  margin-top: 7px;
+}
+.gs-invites__records-head button {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 10px;
+}
+.gs-invites__filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.gs-invites__filters input,
+.gs-invites__filters select {
+  font-size: 10px;
+  padding: 11px 9px;
+  height: 40px;
+}
+.gs-invites__count {
+  font-size: 10px !important;
+  margin: 13px 0 18px;
+  color: #8c9fa2 !important;
+}
+.gs-invites__list {
+  display: grid;
+  gap: 14px;
+}
+.gs-invites__list article {
+  padding: 17px;
+  border: 1px solid #e1ebe5;
+  border-radius: 11px;
+  background: #fcfefd;
+  min-width: 0;
+}
+.gs-invites__row-title {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.gs-invites__row-title > span {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 8px;
+  background: #edf6f1;
+  color: #559a83;
+  flex-shrink: 0;
+}
+.gs-invites__row-title > div {
+  flex: 1;
+  min-width: 90px;
+}
+.gs-invites__row-title h4 {
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.gs-invites__row-title p {
+  font-size: 9px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.gs-invites__status {
+  font-size: 8px;
+  font-weight: 650;
+  white-space: nowrap;
+  background: #fff2db;
+  color: #937242;
+  border-radius: 5px;
+  padding: 6px 7px;
+}
+.gs-invites__status--accepted {
+  background: #e6f4e9;
+  color: #4e8465;
+}
+.gs-invites__status--revoked,
+.gs-invites__status--expired {
+  background: #f1eee9;
+  color: #978c7a;
+}
+.gs-invites__row-meta {
+  font-size: 9px !important;
+  margin: 15px 0 10px;
+}
+.gs-invites__history {
+  border-top: 1px solid #e5ece8;
+  padding-top: 11px;
+  font-size: 9px;
+  color: #7b9391;
+}
+.gs-invites__history summary {
+  cursor: pointer;
+}
+.gs-invites__history ol {
+  padding-left: 17px;
+  margin-top: 11px;
+}
+.gs-invites__history li {
+  padding-bottom: 8px;
+  line-height: 1.8;
+}
+.gs-invites__history small {
+  margin-left: 8px;
+  font-size: 8px;
+  color: #94a5a1;
+}
+.gs-invites__row-actions {
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-top: 15px;
+}
+.gs-invites__row-actions button {
+  font-size: 9px;
+  color: #398272;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gs-invites__row-actions button:last-child {
+  color: #a18565;
+}
+.gs-invites__accepted {
+  font-size: 9px !important;
+  color: #588771 !important;
+}
+.gs-invites__empty {
+  text-align: center;
+  padding: 43px 13px;
+  background: #f8fbf9;
+  border-radius: 10px;
+  border: 1px dashed #d8e8de;
+  margin-top: 20px;
+}
+.gs-invites__empty > svg {
+  margin: 0 auto 15px;
+  color: #7da794;
+}
+.gs-invites__empty h3 {
+  font-size: 16px;
+}
+.gs-invites__empty p {
+  font-size: 11px;
+  margin: 10px auto;
+  max-width: 300px;
+}
+.gs-invites__pagination {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 23px;
+  font-size: 10px;
+}
+.gs-invites__error,
+.gs-invites__notice {
+  padding: 15px 18px;
+  border: 1px solid #e9d6c8;
+  background: #fff3e9;
+  border-radius: 10px;
+  margin: 18px 0;
+  color: #a16a48 !important;
+  overflow-wrap: anywhere;
+}
+.gs-invites__notice {
+  border-color: #d4e7d9;
+  background: #eef8f0;
+  color: #57846b !important;
+}
+.gs-invites__share {
+  position: relative;
+  border: 1px solid #bcdccb;
+  background: #edf8f1;
+  padding: 23px;
+  border-radius: 13px;
+  margin: 20px 0 25px;
+}
+.gs-invites__share h3 {
+  font-size: 19px;
+  margin: 9px 25px 10px 0;
+}
+.gs-invites__share p {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.gs-invites__share > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.gs-invites__share input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: #4c7b6b;
+}
+.gs-invites__share > small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.85;
+  color: #83a190;
+  margin-top: 13px;
+}
+.gs-invites__close {
+  position: absolute;
+  top: 17px;
+  right: 17px;
+  color: #78a28b;
+}
+.gs-invites__confirm {
+  background: #fff5e7;
+  border: 1px solid #efdfc4;
+  padding: 13px;
+  border-radius: 8px;
+  margin-top: 15px;
+}
+.gs-invites__confirm p {
+  font-size: 10px;
+  color: #9a7a4a;
+  margin-bottom: 10px;
+}
+.gs-invites__confirm button {
+  font-size: 9px;
+  color: #927137;
+  margin-right: 17px;
+  text-decoration: underline;
+}
+.gs-invites :is(a, button, input, select):focus-visible,
+.gs-invite-entry :is(a, button):focus-visible {
+  outline: 3px solid #087f8c;
+  outline-offset: 3px;
+}
+.gs-invite-entry {
+  max-width: 650px;
+  margin: 70px auto;
+  padding: 40px 30px;
+  text-align: center;
+  border: 1px solid #dbe9e3;
+  border-radius: 18px;
+  background: #f7fbf8;
+  min-height: 330px;
+  color: #2f5661;
+}
+.gs-invite-entry h1 {
+  font-size: 32px;
+  margin: 18px 0;
+  line-height: 1.25;
+}
+.gs-invite-entry p {
+  font-size: 13px;
+  color: #738e93;
+  line-height: 1.9;
+  margin: 15px 0;
+  overflow-wrap: anywhere;
+}
+.gs-invite-entry .btn {
+  display: inline-flex;
+  margin-top: 18px;
+}
+.gs-invite-entry > svg {
+  color: #4c9279;
+  margin: 0 auto;
+}
+.gs-invite-entry__icon {
+  display: grid;
+  place-items: center;
+  background: #e2f1e9;
+  width: 64px;
+  height: 64px;
+  border-radius: 17px;
+  margin: auto;
+  color: #43896e;
+}
+@media (max-width: 1100px) {
+  .gs-invites__layout {
+    grid-template-columns: 1fr;
+  }
+  .gs-invites__hero h2 {
+    font-size: 31px;
+  }
+  .gs-invites__principles {
+    gap: 15px;
+    padding: 17px;
+  }
+  .gs-invites__principles span {
+    font-size: 9px;
+  }
+  .gs-invites__list {
+    grid-template-columns: 1fr 1fr;
+  }
+  .gs-invites__status {
+    font-size: 8px;
+  }
+  .gs-invites__row-title > div {
+    min-width: 140px;
+  }
+  .gs-invites__filters {
+    max-width: 550px;
+  }
+}
+@media (max-width: 600px) {
+  .gs-invites__hero {
+    gap: 10px;
+    padding-top: 15px;
+  }
+  .gs-invites__hero h2 {
+    font-size: 27px;
+    letter-spacing: -0.7px;
+  }
+  .gs-invites__hero-icon {
+    display: none;
+  }
+  .gs-invites__principles {
+    display: grid;
+    gap: 12px;
+  }
+  .gs-invites__principles span {
+    font-size: 10px;
+  }
+  .gs-invites__form,
+  .gs-invites__records {
+    padding: 19px;
+  }
+  .gs-invites__list {
+    grid-template-columns: 1fr;
+  }
+  .gs-invites__share > div {
+    display: block;
+  }
+  .gs-invites__share .btn {
+    margin-top: 10px;
+  }
+  .gs-invites__share {
+    padding: 18px;
+  }
+  .gs-invites__share h3 {
+    font-size: 17px;
+  }
+  .gs-invites__filters {
+    grid-template-columns: 1fr;
+  }
+  .gs-invites__filters select {
+    margin-top: 0;
+  }
+  .gs-invite-entry {
+    margin: 30px 15px;
+    padding: 28px 20px;
+  }
+  .gs-invite-entry h1 {
+    font-size: 27px;
+  }
+}

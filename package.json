@@ -1,0 +1,32 @@
+{
+  "name": "gharseva-mern",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c cyan,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "seed": "npm run seed -w server",
+    "test": "npm run build && npm run test -w server",
+    "demo": "node scripts/demo.js",
+    "demo:accounts": "node scripts/demo-accounts.js",
+    "deploy:check": "node scripts/check-production.js",
+    "deploy:smoke": "node scripts/smoke-deployment.js",
+    "deploy:bootstrap": "node scripts/bootstrap-production.js",
+    "format": "prettier --write \"client/src/**/*.{js,jsx,css}\" \"server/**/*.{js,json}\" \"scripts/*.js\" \"*.json\" \"*.md\"",
+    "demo:expand": "node scripts/expand-demo.js",
+    "integrations:check": "node scripts/check-integrations.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.9.9"
+  },
+  "engines": {
+    "node": ">=22.12.0 <25"
+  }
+}
