@@ -419,7 +419,14 @@ function testMode() {
 test("new plan snapshots capped default deposit and historical bookings do not acquire requirements", async () => {
   assert.equal(b.paymentPlan.depositAmount, 9900);
   assert.equal(paymentPlanSnapshot(40).depositAmount, 4000);
-  assert.equal(paymentPlanSnapshot(299, { mode: "disabled" }), undefined);
+  assert.equal(
+    paymentPlanSnapshot(299, { mode: "disabled" }).depositAmount,
+    9900,
+  );
+  assert.equal(
+    paymentPlanSnapshot(299, { mode: "disabled" }).mode,
+    "razorpay_test",
+  );
   const saved = clone(b.paymentPlan);
   process.env.PAYMENT_DEPOSIT_RUPEES = "150";
   assert.deepEqual(b.paymentPlan, saved);
@@ -1198,7 +1205,8 @@ test("ordinary booking handler snapshots authoritative capped plan and ignores f
     ...input,
     time: "10:00",
   });
-  assert.equal(ordinary.paymentPlan, undefined);
+  assert.equal(ordinary.paymentPlan.depositAmount, 10000);
+  assert.equal(ordinary.paymentPlan.mode, "razorpay_test");
   assert.equal(ordinary.status, "PENDING");
 });
 
@@ -1278,4 +1286,309 @@ test("a refund discovered with the first balance-capture callback does not creat
   assert.equal(b.billing.settledCredits, 29900);
   assert.equal(c.canBalance, false);
   assert.equal(createCount, 2);
+});
+
+function signedHook(payload, eventId = "event-extra-fixture") {
+  const raw = Buffer.from(JSON.stringify(payload));
+  return call("post", "/api/payments/webhook", {
+    user: null,
+    raw,
+    headers: {
+      "X-Razorpay-Signature": createHmac(
+        "sha256",
+        process.env.RAZORPAY_WEBHOOK_SECRET,
+      )
+        .update(raw)
+        .digest("hex"),
+      "X-Razorpay-Event-Id": eventId,
+    },
+  });
+}
+test("signed unmatched event stays unprocessed, recovers stable receipt and can be replayed safely", async () => {
+  testMode();
+  uncertain = true;
+  assert.equal((await order()).status, 503);
+  const p = record("VISIT_DEPOSIT"),
+    o = [...orders.values()][0];
+  const snapshot = capture({ ...p, orderId: o.id });
+  const payload = {
+    event: "payment.captured",
+    payload: { payment: { entity: { id: snapshot.id } } },
+  };
+  // Simulate an event that cannot yet be matched locally.
+  const receipt = p.receipt;
+  p.receipt = "temporarily_unmatched";
+  assert.equal((await signedHook(payload)).status, 202);
+  let event = tables.get(PaymentEvent)[0];
+  assert.equal(event.processedAt, undefined);
+  assert.equal(event.gatewayOrderId, o.id);
+  assert.equal(event.resolution, "UNMATCHED");
+  p.receipt = receipt;
+  assert.equal((await signedHook(payload)).status, 200);
+  assert.equal(record("VISIT_DEPOSIT").status, "CAPTURED");
+  assert.equal(record("VISIT_DEPOSIT").orderId, o.id);
+  assert.ok(event.processedAt);
+  assert.equal((await signedHook(payload)).data.duplicate, true);
+  assert.equal(createCount, 1);
+});
+test("failed webhook application is retryable and admin-only audit preserves reference", async () => {
+  testMode();
+  await order();
+  const p = record("VISIT_DEPOSIT"),
+    s = capture(p);
+  const original = gateway.orderPayments;
+  gateway.orderPayments = async () => {
+    throw Object.assign(Error("temporary fixture outage"), { status: 503 });
+  };
+  const payload = {
+    event: "payment.captured",
+    payload: { payment: { entity: { id: s.id } } },
+  };
+  assert.equal((await signedHook(payload)).status, 503);
+  assert.equal(tables.get(PaymentEvent)[0].processedAt, undefined);
+  assert.equal((await call("get", "/api/payments/events")).status, 403);
+  assert.equal(
+    (await call("get", "/api/payments/events", { user: provider })).status,
+    403,
+  );
+  assert.equal(
+    (await call("get", "/api/payments/events", { user: admin })).data.length,
+    1,
+  );
+  gateway.orderPayments = original;
+  assert.equal((await signedHook(payload)).status, 200);
+  assert.ok(tables.get(PaymentEvent)[0].processedAt);
+});
+test("webhook capture before create response is not downgraded by late order binding", async () => {
+  testMode();
+  const original = gateway.createOrder;
+  gateway.createOrder = async (p) => {
+    const o = await original(p);
+    const snapshot = capture({ ...p, orderId: o.id });
+    const result = await signedHook({
+      event: "payment.captured",
+      payload: { payment: { entity: { id: snapshot.id } } },
+    });
+    assert.equal(result.status, 200);
+    return o;
+  };
+  const result = await order();
+  assert.equal(result.status, 200);
+  assert.equal(result.data.checkoutReady, false);
+  assert.equal(record("VISIT_DEPOSIT").status, "CAPTURED");
+  assert.equal(result.data.summary.depositPaid, true);
+  assert.equal(createCount, 1);
+});
+test("signed malformed event shape cannot update event or payment records", async () => {
+  testMode();
+  assert.equal((await signedHook(null)).status, 400);
+  assert.equal((await signedHook([])).status, 400);
+  assert.equal(tables.get(PaymentEvent).length, 0);
+});
+test("wrong booking and stale frozen bill cannot credit a captured stage", async () => {
+  await readyForBill();
+  await bill();
+  await approve(1);
+  await order("FINAL_BALANCE");
+  const deposit = record("VISIT_DEPOSIT"),
+    balance = record("FINAL_BALANCE");
+  await simulate(balance);
+  balance.billVersion = 2;
+  let summary = paymentSummary(b, [deposit, balance]);
+  assert.match(summary.issue, /approved bill/);
+  assert.equal(summary.balanceCaptured, 0);
+  assert.equal(summary.unallocatedCaptured, balance.amount);
+  deposit.booking = other._id;
+  summary = paymentSummary(b, [deposit, balance]);
+  assert.equal(summary.depositPaid, false);
+  assert.equal(summary.depositCredit, 0);
+});
+
+test("temporary customer verification outage preserves order and later authoritative capture", async () => {
+  testMode();
+  await order();
+  const p = record("VISIT_DEPOSIT");
+  capture(p);
+  const original = gateway.fetchPayment;
+  gateway.fetchPayment = async () => {
+    throw Object.assign(Error("temporary fixture network"), { status: 503 });
+  };
+  assert.equal((await verify(p)).status, 503);
+  assert.equal(record("VISIT_DEPOSIT").status, "READY");
+  assert.equal(
+    (await paymentContext(b._id, customer)).summary.depositPaid,
+    false,
+  );
+  gateway.fetchPayment = original;
+  assert.equal((await verify(p)).status, 200);
+  assert.equal(createCount, 1);
+  assert.equal(
+    (await paymentContext(b._id, customer)).summary.depositPaid,
+    true,
+  );
+});
+test("stale authorized callback cannot overwrite a captured authoritative attempt", async () => {
+  testMode();
+  await order();
+  const p = record("VISIT_DEPOSIT");
+  const s = capture(p);
+  await reconcilePayment(p, gateway, "CHECKOUT", {
+    ...s,
+    status: "authorized",
+    captured: false,
+  });
+  assert.equal(record("VISIT_DEPOSIT").status, "CAPTURED");
+  assert.equal(
+    (await paymentContext(b._id, customer)).summary.depositPaid,
+    true,
+  );
+});
+test("deposit callback cannot verify another payment stage, booking or user", async () => {
+  testMode();
+  await order();
+  const d = record("VISIT_DEPOSIT");
+  capture(d);
+  await verify(d);
+  b.status = "COMPLETED";
+  await bill();
+  await approve(1);
+  await order("FINAL_BALANCE");
+  const balance = record("FINAL_BALANCE"),
+    snapshot = attempts.get(d.orderId)[0];
+  const forged = {
+    razorpay_order_id: d.orderId,
+    razorpay_payment_id: snapshot.id,
+    razorpay_signature: checkoutSignature(d.orderId, snapshot.id),
+  };
+  assert.equal(
+    (
+      await call("post", "/api/payments/:id/verify", {
+        params: { id: balance._id },
+        body: forged,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await call("post", "/api/payments/:id/verify", {
+        user: provider,
+        params: { id: d._id },
+        body: forged,
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await call("post", "/api/payments/:id/verify", {
+        user: other,
+        params: { id: d._id },
+        body: forged,
+      })
+    ).status,
+    404,
+  );
+  assert.equal(balance.status, "READY");
+  assert.equal(
+    (await paymentContext(b._id, customer)).summary.remaining,
+    20000,
+  );
+});
+test("payment options reveal public capabilities only", async () => {
+  testMode();
+  const result = await call("get", "/api/payments/options", { user: null });
+  assert.equal(result.status, 200);
+  assert.equal(result.data.enabled, true);
+  const publicText = JSON.stringify(result.data);
+  for (const key of ["RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"])
+    assert.ok(!publicText.includes(process.env[key]));
+  assert.ok(!publicText.includes("Authorization"));
+});
+
+test("callback and duplicate webhooks race through one capture for both stages with consistent role views", async () => {
+  testMode();
+  await order();
+  async function race(p, eventId) {
+    const snapshot = capture(p),
+      payload = {
+        event: "payment.captured",
+        payload: { payment: { entity: { id: snapshot.id } } },
+      };
+    const results = await Promise.all([
+      verify(p),
+      signedHook(payload, eventId),
+      signedHook(payload, eventId),
+    ]);
+    assert.ok(
+      results.every((r) => r.status === 200),
+      JSON.stringify(results),
+    );
+  }
+  await race(record("VISIT_DEPOSIT"), "event-deposit-race");
+  b.status = "COMPLETED";
+  await bill();
+  await approve(1);
+  await order("FINAL_BALANCE");
+  await race(record("FINAL_BALANCE"), "event-balance-race");
+  const views = await Promise.all(
+    [customer, provider, admin].map((user) => paymentContext(b._id, user)),
+  );
+  assert.deepEqual(views[0].summary, views[1].summary);
+  assert.deepEqual(views[0].summary, views[2].summary);
+  assert.equal(views[0].summary.grossCaptured, 29900);
+  assert.equal(views[0].summary.remaining, 0);
+  assert.equal(tables.get(Payment).length, 2);
+  assert.equal(tables.get(PaymentEvent).length, 2);
+});
+test("a failed payment persistence update is not acknowledged as a processed webhook", async () => {
+  testMode();
+  await order();
+  const snapshot = capture(record("VISIT_DEPOSIT"));
+  const original = Payment.findOneAndUpdate;
+  let failWrite = true;
+  mock.method(Payment, "findOneAndUpdate", function (filter, update, ...args) {
+    if (failWrite && update.$set?.status === "CAPTURED") {
+      failWrite = false;
+      throw Object.assign(Error("fixture write interruption"), { status: 503 });
+    }
+    return original.call(this, filter, update, ...args);
+  });
+  const payload = {
+    event: "payment.captured",
+    payload: { payment: { entity: { id: snapshot.id } } },
+  };
+  assert.equal((await signedHook(payload)).status, 503);
+  assert.equal(tables.get(PaymentEvent)[0].processedAt, undefined);
+  assert.equal(record("VISIT_DEPOSIT").status, "READY");
+  assert.equal((await signedHook(payload)).status, 200);
+  assert.ok(tables.get(PaymentEvent)[0].processedAt);
+  assert.equal(record("VISIT_DEPOSIT").capturedAmount, 9900);
+});
+
+test("concurrent receipt binding cannot attach a webhook to a different gateway order", async () => {
+  testMode();
+  uncertain = true;
+  await order();
+  const p = record("VISIT_DEPOSIT"),
+    o = [...orders.values()][0],
+    s = capture({ ...p, orderId: o.id });
+  const original = Payment.findOneAndUpdate;
+  let compete = true;
+  mock.method(Payment, "findOneAndUpdate", function (filter, update, ...args) {
+    if (compete && update.$set?.orderId === o.id) {
+      compete = false;
+      p.orderId = "order_conflicting";
+      p.status = "READY";
+    }
+    return original.call(this, filter, update, ...args);
+  });
+  const result = await signedHook({
+    event: "payment.captured",
+    payload: { payment: { entity: { id: s.id } } },
+  });
+  assert.equal(result.status, 409);
+  assert.equal(tables.get(PaymentEvent)[0].processedAt, undefined);
+  assert.equal(record("VISIT_DEPOSIT").capturedAmount, undefined);
+  assert.equal(record("VISIT_DEPOSIT").orderId, "order_conflicting");
 });

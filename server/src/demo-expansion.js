@@ -1,23 +1,34 @@
+import { inspectCatalog } from "./catalog-reconciliation.js";
 import bcrypt from "bcryptjs";
 import { readFileSync } from "node:fs";
 import { User, Category, File } from "./models.js";
-import { demoProviders, demoPeople } from "../../seed-data/demo-accounts.js";
-import { demoWorkImages } from "../../seed-data/demo-work-images.js";
-import services from "../../seed-data/services.js";
+import { demoImageFor } from "../../seed-data/demo-work-images.js";
+import { canonicalCatalog } from "./canonical-catalog.js";
+import { demoDefinitions } from "../../scripts/local-demo-guide.js";
 import { password } from "./domain.js";
 import { demoDelivery } from "./identity-services.js";
 
-export async function expandDemo({ apply = false, passwords = {} } = {}) {
+export async function expandDemo({
+  apply = false,
+  passwords = {},
+  testOnlyContacts = false,
+} = {}) {
+  const definitions = demoDefinitions({ testOnlyContacts });
+  if (apply && !demoDelivery())
+    throw Error(
+      "Demo expansion apply requires explicit non-production classroom mode.",
+    );
   if (process.env.NODE_ENV === "production")
     throw Error("Demo expansion is forbidden in production.");
+  const catalog = inspectCatalog(await Category.find({}).lean());
+  if (apply && catalog.conflicts.length)
+    throw Error(
+      "Catalog conflicts require review before demo apply. No changes made.",
+    );
   // Validate every required creation password before the first write.
   if (apply)
     for (const role of ["customer", "provider", "admin"]) {
-      const definitions =
-        role === "provider"
-          ? demoProviders
-          : demoPeople.filter((p) => p.role === role);
-      for (const p of definitions)
+      for (const p of definitions.filter((p) => p.role === role))
         if (
           !(await User.exists({
             $or: [
@@ -43,34 +54,20 @@ export async function expandDemo({ apply = false, passwords = {} } = {}) {
         }
     }
   const report = [];
-  for (const service of services) {
-    if (await Category.exists({ slug: service.id })) continue;
-    report.push({ action: "ADD CATEGORY", id: service.id });
+  for (const service of canonicalCatalog) {
+    if (await Category.exists({ slug: service.slug })) continue;
+    report.push({ action: "ADD CATEGORY", id: service.slug });
     if (apply)
       await Category.updateOne(
-        { slug: service.id },
+        { slug: service.slug },
         {
-          $setOnInsert: {
-            slug: service.id,
-            name: service.name,
-            description: service.description,
-            price: service.startingPrice,
-            enabled: true,
-            image:
-              "/images/" +
-              ({ appliance: "electrical", labour: "masonry" }[service.id] ||
-                service.id) +
-              ".jpg",
-          },
+          $setOnInsert: service,
         },
         { upsert: true },
       );
   }
   const hashes = {};
-  for (const p of [
-    ...demoPeople,
-    ...demoProviders.map((p) => ({ ...p, role: "provider" })),
-  ]) {
+  for (const p of definitions) {
     const matches = await User.find({
       $or: [
         { email: p.email },
@@ -101,13 +98,14 @@ export async function expandDemo({ apply = false, passwords = {} } = {}) {
       });
       continue;
     }
-    report.push({
+    const entry = {
       action: "ADD ACCOUNT",
       id: p.id,
       email: p.email,
       city: p.city,
       category: p.serviceId || p.role,
-    });
+    };
+    report.push(entry);
     if (!apply) continue;
     if (!hashes[p.role]) {
       const value =
@@ -155,7 +153,7 @@ export async function expandDemo({ apply = false, passwords = {} } = {}) {
               skills: p.skills,
               days: [0, 1, 2, 3, 4, 5, 6],
               slots: ["09:00", "11:00", "14:00", "16:00"],
-              portfolio: demoWorkImages[p.id] ? [demoWorkImages[p.id].src] : [],
+              portfolio: demoImageFor(p.id) ? [demoImageFor(p.id).src] : [],
               photo: "",
             },
           }
@@ -176,6 +174,7 @@ export async function expandDemo({ apply = false, passwords = {} } = {}) {
       try {
         await u.save();
         await file.save();
+        entry.created = true;
       } catch (e) {
         if (e.code !== 11000) throw e;
         report.push({ action: "CONCURRENT ACCOUNT PRESERVED", id: p.id });
@@ -183,6 +182,7 @@ export async function expandDemo({ apply = false, passwords = {} } = {}) {
     } else {
       try {
         await u.save();
+        entry.created = true;
       } catch (e) {
         if (e.code !== 11000) throw e;
         report.push({ action: "CONCURRENT ACCOUNT PRESERVED", id: p.id });

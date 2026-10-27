@@ -1,5 +1,11 @@
 import { createHmac } from "node:crypto";
 import { fail, email, mobile } from "./domain.js";
+import { emailReadiness, deliverEmailCode } from "./email-delivery.js";
+export {
+  emailReadiness,
+  smtpTransportOptions,
+  verifySmtpConnection,
+} from "./email-delivery.js";
 
 export function demoDelivery() {
   return (
@@ -29,15 +35,7 @@ export function identityOptions() {
   );
   return {
     demo,
-    email:
-      demo ||
-      Boolean(
-        process.env.AUTH_DELIVERY_MODE === "live" &&
-        process.env.SMTP_HOST &&
-        process.env.SMTP_FROM &&
-        process.env.SMTP_USER &&
-        process.env.SMTP_PASSWORD,
-      ),
+    email: demo || emailReadiness().ready,
     mobile:
       demo ||
       Boolean(
@@ -90,77 +88,15 @@ async function twilio(path, values) {
     fail(503, "SMS verification is unavailable. Try again later or use email.");
   return result;
 }
-// TLS remains mandatory. This contains server-only settings; never return it to a browser.
-export function smtpTransportOptions(env = process.env) {
-  const port = Number(env.SMTP_PORT || 587);
-  if (
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65535 ||
-    !env.SMTP_HOST ||
-    !env.SMTP_USER ||
-    !env.SMTP_PASSWORD ||
-    !env.SMTP_FROM
-  )
-    fail(503, "SMTP settings are incomplete or invalid. Contact support.");
-  return {
-    host: env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    disableFileAccess: true,
-    disableUrlAccess: true,
-  };
-}
-export async function verifySmtpConnection() {
-  const { default: nodemailer } = await import("nodemailer");
-  const transporter = nodemailer.createTransport(smtpTransportOptions());
-  try {
-    await transporter.verify();
-  } catch {
-    fail(
-      503,
-      "SMTP connection/TLS/authentication check failed. No delivery was verified.",
-    );
-  } finally {
-    transporter.close();
-  }
-}
 export async function deliverCode(channel, contact, value, purpose) {
+  validateIdentityEnvironment();
   if (demoDelivery()) return;
   if (channel === "mobile") {
-    await twilio("Verifications", { To: `+91${contact}`, Channel: "sms" });
+    await twilio("Verifications", { To: "+91" + contact, Channel: "sms" });
     return;
   }
-  if (!identityOptions().email)
-    fail(503, "Email delivery is not configured. Contact support.");
-  const { default: nodemailer } = await import("nodemailer");
-  try {
-    const transporter = nodemailer.createTransport(smtpTransportOptions());
-    const result = await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: contact,
-      subject: "Your GharSeva verification code",
-      text: `Your GharSeva ${purpose === "recover" ? "password recovery" : purpose === "login" ? "sign-in" : purpose === "admin_reauth" ? "administrator security check" : "contact verification"} code is ${value}. It expires in 5 minutes. Do not share this code. If you did not request it, ignore this email.`,
-    });
-    if (
-      !Array.isArray(result.accepted) ||
-      !result.accepted.some(
-        (address) => String(address).toLowerCase() === contact.toLowerCase(),
-      ) ||
-      result.rejected?.length
-    )
-      throw new Error("SMTP recipient was not accepted.");
-  } catch {
-    fail(
-      503,
-      "Email delivery is unavailable. Try again later or contact support.",
-    );
-  }
+  if (channel !== "email") fail(400, "Choose email or mobile verification.");
+  await deliverEmailCode(contact, value, purpose);
 }
 export async function checkSms(contact, value) {
   return (

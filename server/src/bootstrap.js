@@ -1,7 +1,7 @@
+import { canonicalCatalog } from "./canonical-catalog.js";
 import bcrypt from "bcryptjs";
 import { User, Category, Settings } from "./models.js";
 import { text, email, mobile, password } from "./domain.js";
-import services from "../../seed-data/services.js";
 
 // Operator-only function. No HTTP route invokes it and existing accounts are never promoted.
 export async function bootstrapProduction(input) {
@@ -33,20 +33,10 @@ export async function bootstrapProduction(input) {
     role: "admin",
     passwordHash: await bcrypt.hash(input.password, 12),
   });
-  const images = { labour: "masonry", appliance: "electrical" };
-  for (const service of services)
+  for (const category of canonicalCatalog)
     await Category.updateOne(
-      { slug: service.id },
-      {
-        $setOnInsert: {
-          slug: service.id,
-          name: service.name,
-          description: service.description,
-          price: service.startingPrice,
-          image: `/images/${images[service.id] || service.id}.jpg`,
-          enabled: true,
-        },
-      },
+      { slug: category.slug },
+      { $setOnInsert: category },
       { upsert: true },
     );
   await Settings.updateOne(

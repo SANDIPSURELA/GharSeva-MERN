@@ -19,6 +19,8 @@ export function AppProvider({ children }) {
     [loading, setLoading] = useState(true),
     [providers, setProviders] = useState([]),
     [categories, setCategories] = useState([]),
+    [discoveryLoading, setDiscoveryLoading] = useState(true),
+    [discoveryError, setDiscoveryError] = useState(""),
     [config, setConfig] = useState({
       bookingEnabled: true,
       providerRegistration: true,
@@ -45,6 +47,8 @@ export function AppProvider({ children }) {
     cityRef.current = city;
     cityRequest.current++;
     setProviders([]);
+    setDiscoveryLoading(true);
+    setDiscoveryError("");
     setComparison([]);
     rawSetCity(city);
     try {
@@ -67,6 +71,8 @@ export function AppProvider({ children }) {
   const refresh = useCallback(async () => {
     const serial = ++cityRequest.current;
     const city = cityRef.current;
+    setDiscoveryLoading(true);
+    setDiscoveryError("");
     try {
       const [p, c, g] = await Promise.all([
         api(`/providers${city ? "?city=" + encodeURIComponent(city) : ""}`),
@@ -74,16 +80,21 @@ export function AppProvider({ children }) {
         api("/config"),
       ]);
       if (serial !== cityRequest.current) return;
+      if (!Array.isArray(p) || !Array.isArray(c) || !g || typeof g !== "object")
+        throw new Error(
+          "Service discovery returned an unreadable response. Retry listings.",
+        );
       setProviders(p);
       setCategories(c);
       setConfig(g);
       setError("");
     } catch (e) {
       if (serial !== cityRequest.current) return;
-      setError(
-        e.message ||
-          "Cannot connect to GharSeva. Start the backend and configure the database.",
-      );
+      setProviders([]);
+      setCategories([]);
+      setDiscoveryError(e.message || "Service discovery is unavailable.");
+    } finally {
+      if (serial === cityRequest.current) setDiscoveryLoading(false);
     }
   }, []);
   useEffect(() => {
@@ -325,6 +336,8 @@ export function AppProvider({ children }) {
           (p) => canonicalCity(p.city) === selectedCity,
         ),
         categories,
+        discoveryLoading,
+        discoveryError,
         config,
         error,
         refresh,

@@ -8,7 +8,7 @@ import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import { User, Category, Booking } from "../src/models.js";
 import { bootstrapProduction } from "../src/bootstrap.js";
@@ -37,17 +37,8 @@ const adminInput = {
 let db, server, app, base, admin, deliveredCode;
 before(async () => {
   Object.assign(process.env, production);
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri());
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
   await Promise.all([User.init(), Category.init(), Booking.init()]);
   Object.assign(process.env, {
     SMTP_HOST: "smtp.example.test",
@@ -67,7 +58,7 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
 });
 after(async () => {
-  await new Promise((resolve) => server?.close(resolve));
+  if (server) await new Promise((resolve) => server.close(resolve));
   await mongoose.disconnect();
   await db?.stop();
 });
@@ -130,7 +121,7 @@ test("database disconnect makes readiness fail while liveness remains available"
     assert.equal((await r.json()).database, "unavailable");
     assert.equal((await sessionFetch(base + "/api/health/live")).status, 200);
   } finally {
-    await mongoose.connect(db.getUri());
+    await connectIsolatedMongo(db);
   }
 });
 

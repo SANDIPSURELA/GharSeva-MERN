@@ -2,21 +2,32 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 import {
   identityOptions,
+  emailReadiness,
   verifySmtpConnection,
 } from "../server/src/identity-services.js";
-import { paymentOptions } from "../server/src/payment-gateway.js";
+import {
+  paymentOptions,
+  paymentReadiness,
+} from "../server/src/payment-gateway.js";
 
 dotenv.config({
   path: fileURLToPath(new URL("../server/.env", import.meta.url)),
   quiet: true,
 });
 const args = process.argv.slice(2);
-if (args.some((a) => a !== "--smtp-connect") || args.length > 1)
+if (
+  args.some(
+    (a) => !["--smtp-connect", "--email-ready", "--payments-ready"].includes(a),
+  ) ||
+  new Set(args).size !== args.length
+)
   throw Error(
-    "Use no arguments, or --smtp-connect. This command never sends email.",
+    "Use --email-ready, --payments-ready and/or --smtp-connect, or no arguments. No messages, charges or data changes.",
   );
 const options = identityOptions(),
-  payments = paymentOptions();
+  payments = paymentOptions(),
+  email = emailReadiness(),
+  paymentConfig = paymentReadiness();
 const configured = (name) =>
   process.env[name] ? "set (not verified)" : "missing";
 console.log(
@@ -28,10 +39,13 @@ console.log(
       authentication: options.demo
         ? "CLASSROOM - no email delivery"
         : "ordinary - requires actual email",
-      email:
-        options.email && !options.demo
-          ? "configured, receipt NOT verified"
-          : "missing live settings",
+      email: {
+        transport: email.transport,
+        readiness: email.ready
+          ? "configuration valid; provider acceptance and inbox receipt NOT verified"
+          : "live configuration incomplete or invalid",
+        issues: email.errors,
+      },
       google: options.google
         ? "configured, sign-in NOT verified"
         : "disabled or missing Firebase settings",
@@ -40,6 +54,7 @@ console.log(
         : "disabled or missing Firebase/Apple settings",
       payments: {
         mode: payments.mode,
+        issues: paymentConfig.errors,
         checkout: payments.enabled
           ? "configured, transaction NOT verified"
           : "setup required",
@@ -48,10 +63,7 @@ console.log(
         "MONGODB_URI",
         "JWT_SECRET",
         "IDENTITY_STORAGE_KEY",
-        "SMTP_HOST",
-        "SMTP_USER",
-        "SMTP_PASSWORD",
-        "SMTP_FROM",
+        ...email.missing,
         "FIREBASE_PROJECT_ID",
         "FIREBASE_WEB_API_KEY",
         "FIREBASE_AUTH_DOMAIN",
@@ -69,14 +81,20 @@ console.log(
     2,
   ),
 );
+if (args.includes("--payments-ready") && !paymentConfig.ready) {
+  console.error(
+    "Payment readiness failed. Configuration only; no gateway request, charge or data change.",
+  );
+  process.exitCode = 1;
+}
+if (args.includes("--email-ready") && !email.ready) {
+  console.error("Email readiness failed. Configuration only; no message sent.");
+  process.exitCode = 1;
+}
 if (args.includes("--smtp-connect")) {
-  if (
-    options.demo ||
-    process.env.AUTH_DELIVERY_MODE !== "live" ||
-    process.env.GHARSEVA_DEMO === "true"
-  ) {
+  if (!email.ready || email.transport !== "smtp") {
     console.error(
-      "Connection check requires AUTH_DELIVERY_MODE=live and GHARSEVA_DEMO=false. No message sent.",
+      "SMTP connection check requires a ready, selected SMTP transport in live mode. No message sent.",
     );
     process.exitCode = 1;
   } else {

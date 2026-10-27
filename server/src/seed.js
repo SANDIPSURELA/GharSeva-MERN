@@ -1,3 +1,4 @@
+import { canonicalCatalog } from "./canonical-catalog.js";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -5,11 +6,9 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { User, Category, Booking, Review, Settings, File } from "./models.js";
 import { demoProviders, demoPeople } from "../../seed-data/demo-accounts.js";
-import { demoWorkImages } from "../../seed-data/demo-work-images.js";
-import originalServices from "../../seed-data/services.js";
+import { demoImageFor } from "../../seed-data/demo-work-images.js";
 import { password } from "./domain.js";
 import { demoDelivery } from "./identity-services.js";
-dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 export async function seed() {
   const existing = await User.countDocuments();
   if (existing) {
@@ -38,31 +37,10 @@ export async function seed() {
       ]),
     ),
   );
-  const images = {
-    plumbing: "plumbing",
-    electrical: "electrical",
-    cleaning: "cleaning",
-    cooking: "cooking",
-    carpentry: "carpentry",
-    masonry: "masonry",
-    painting: "painting",
-    labour: "masonry",
-    appliance: "electrical",
-    gardening: "gardening",
-  };
-  for (const s of originalServices)
+  for (const category of canonicalCatalog)
     await Category.updateOne(
-      { slug: s.id },
-      {
-        $setOnInsert: {
-          slug: s.id,
-          name: s.name,
-          description: s.description,
-          price: s.startingPrice,
-          image: `/images/${images[s.id]}.jpg`,
-          enabled: true,
-        },
-      },
+      { slug: category.slug },
+      { $setOnInsert: category },
       { upsert: true },
     );
   const personFields = (role) => {
@@ -116,7 +94,7 @@ export async function seed() {
         status: "APPROVED",
         photo: "",
         demoProviderId: p.id,
-        portfolio: demoWorkImages[p.id] ? [demoWorkImages[p.id].src] : [],
+        portfolio: demoImageFor(p.id) ? [demoImageFor(p.id).src] : [],
         skills: p.skills,
         available: true,
         days: [0, 1, 2, 3, 4, 5, 6],
@@ -173,6 +151,10 @@ export async function seed() {
   );
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  dotenv.config({
+    path: fileURLToPath(new URL("../.env", import.meta.url)),
+    quiet: true,
+  });
   try {
     if (!process.env.MONGODB_URI)
       throw new Error("Configure MONGODB_URI in server/.env first.");

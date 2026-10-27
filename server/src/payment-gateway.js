@@ -1,42 +1,74 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { fail } from "./domain.js";
 import { demoDelivery } from "./identity-services.js";
+const cleanSecret = (value) =>
+  typeof value === "string" &&
+  /^[!-~]{8,512}$/.test(value) &&
+  !/^(replace|your[_< -]|<|changeme)/i.test(value);
+export function paymentReadiness(env = process.env) {
+  const requested = env.PAYMENTS_MODE || "disabled",
+    deposit = Number(env.PAYMENT_DEPOSIT_RUPEES || 99);
+  const depositValid =
+    Number.isInteger(deposit) && deposit >= 1 && deposit <= 500;
+  const errors = [];
+  if (requested !== "razorpay_test")
+    errors.push("PAYMENTS_MODE must be razorpay_test for gateway readiness.");
+  if (!/^rzp_test_[a-zA-Z0-9]{5,80}$/.test(env.RAZORPAY_KEY_ID || ""))
+    errors.push(
+      "RAZORPAY_KEY_ID must be a TEST key ID; live keys are refused.",
+    );
+  for (const key of ["RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"])
+    if (!cleanSecret(env[key])) errors.push(key + " is missing or malformed.");
+  if (!depositValid)
+    errors.push(
+      "PAYMENT_DEPOSIT_RUPEES must retain a valid integer-rupee value from 1 to 500.",
+    );
+  if (
+    env.NODE_ENV === "production" &&
+    (env.GHARSEVA_DEMO === "true" || env.AUTH_DELIVERY_MODE === "test")
+  )
+    errors.push("Production classroom authentication is forbidden.");
+  return {
+    mode: ["disabled", "demo", "razorpay_test"].includes(requested)
+      ? requested
+      : "invalid",
+    ready: errors.length === 0,
+    errors,
+    depositValid,
+    depositRupees: depositValid ? deposit : 99,
+  };
+}
 export function paymentOptions() {
-  const requested = process.env.PAYMENTS_MODE || "disabled",
-    deposit = Number(process.env.PAYMENT_DEPOSIT_RUPEES || 99);
-  const depositRupees =
-    Number.isInteger(deposit) && deposit >= 1 && deposit <= 500 ? deposit : 99;
-  if (requested === "demo" && demoDelivery())
+  const readiness = paymentReadiness(),
+    { depositRupees, depositValid } = readiness;
+  if (readiness.mode === "demo" && demoDelivery() && depositValid)
     return {
       mode: "demo",
       enabled: true,
       depositRupees,
+      depositValid,
       title: "Local classroom simulation",
       notice: "No gateway transaction or real money movement.",
     };
-  if (requested === "razorpay_test") {
-    const enabled =
-      /^rzp_test_[a-zA-Z0-9]+$/.test(process.env.RAZORPAY_KEY_ID || "") &&
-      Boolean(
-        process.env.RAZORPAY_KEY_SECRET && process.env.RAZORPAY_WEBHOOK_SECRET,
-      );
+  if (readiness.mode === "razorpay_test")
     return {
       mode: "razorpay_test",
-      enabled,
+      enabled: readiness.ready,
       depositRupees,
+      depositValid,
       title: "Razorpay test mode",
-      notice: enabled
+      notice: readiness.ready
         ? "Test transactions only. No live money collection."
-        : "Razorpay test keys and webhook secret need configuration.",
+        : "Razorpay TEST settings require review. No checkout or simulation fallback is available.",
     };
-  }
   return {
     mode: "disabled",
     enabled: false,
     depositRupees,
+    depositValid,
     title: "Online payments unavailable",
     notice:
-      "Online test payments are not configured. Existing payment requirements and records are unchanged; contact support.",
+      "Online test payments are not configured. Required deposits and balances remain unpaid; contact support.",
   };
 }
 export function validSignature(value, expected) {
@@ -78,6 +110,7 @@ export function razorpayGateway(fetcher = fetch) {
     try {
       response = await fetcher(`https://api.razorpay.com/v1/${path}`, {
         method,
+        redirect: "error",
         signal: AbortSignal.timeout(20000),
         headers: {
           Authorization: `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64")}`,
@@ -97,6 +130,11 @@ export function razorpayGateway(fetcher = fetch) {
         503,
         "The test gateway request could not finish. Check the server credentials and refresh payment status.",
       );
+    if (!data || typeof data !== "object" || Array.isArray(data) || data.error)
+      fail(
+        503,
+        "The test gateway returned an unreadable response. Reconcile before retrying.",
+      );
     return data;
   }
   return {
@@ -112,9 +150,18 @@ export function razorpayGateway(fetcher = fetch) {
       const d = await request(
         `orders?${new URLSearchParams({ receipt, count: "100" })}`,
       );
-      return Array.isArray(d.items)
-        ? d.items.find((o) => o.receipt === receipt) || null
-        : null;
+      if (!Array.isArray(d.items) || d.items.length >= 100)
+        fail(
+          503,
+          "Order history is unreadable or too large; reconciliation is required.",
+        );
+      const matches = d.items.filter((o) => o?.receipt === receipt);
+      if (matches.length > 1)
+        fail(
+          409,
+          "Multiple orders share this receipt. Administrator reconciliation is required.",
+        );
+      return matches[0] || null;
     },
     fetchOrder: (id) => request(`orders/${identifier(id, "order")}`),
     fetchPayment: (id) => request(`payments/${identifier(id, "pay")}`),

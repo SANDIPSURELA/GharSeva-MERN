@@ -3,7 +3,7 @@ import { fixtureLogin } from "./login-fixture.js";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { createApp } from "../src/app.js";
@@ -40,24 +40,15 @@ before(async () => {
   process.env.GHARSEVA_DEMO = "true";
   process.env.JWT_SECRET = randomBytes(48).toString("hex");
   process.env.CLIENT_ORIGIN = "http://localhost:5173";
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri());
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
   await User.init();
   server = createApp().listen(0);
   await new Promise((resolve) => server.once("listening", resolve));
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
 after(async () => {
-  await new Promise((resolve) => server?.close(resolve));
+  if (server) await new Promise((resolve) => server.close(resolve));
   await mongoose.disconnect();
   await db?.stop();
 });

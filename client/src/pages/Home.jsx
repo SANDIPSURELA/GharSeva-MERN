@@ -1,3 +1,5 @@
+import { popularCategories } from "../../../shared/discovery-state.js";
+import { DiscoveryNotice } from "../components/DiscoveryNotice";
 import { supportedCities } from "../../../shared/cities.js";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -19,7 +21,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../context";
 import { money } from "../api";
-import { ProviderCard, Empty } from "../components/UI";
+import { ProviderCard } from "../components/UI";
 import "./Home.css";
 
 const questions = [
@@ -33,7 +35,7 @@ const questions = [
   ],
   [
     "What does the starting price include?",
-    "The listed amount is a starting visit estimate. Describe the work when you book and discuss any extra labour, materials or replacement parts with the professional before agreeing to them. Pay-on-site remains available. An optional visit deposit can be reviewed in your dashboard after acceptance; online flows are currently labelled classroom simulation or configured Razorpay test mode.",
+    "The listed amount is a starting estimate. After provider acceptance, pay the required deposit online before arrival verification and work. Approve extras, review the itemised final bill after completion, then pay the approved total less the credited deposit online. Razorpay TEST payments do not collect live money; unavailable checkout blocks required payments. Historical bookings retain their saved rules.",
   ],
   [
     "When should I share my visit OTP?",
@@ -53,6 +55,8 @@ export function Home() {
   const {
     categories,
     providers,
+    discoveryLoading,
+    discoveryError,
     user,
     selectedCity: city,
     setSelectedCity: setCity,
@@ -143,11 +147,9 @@ export function Home() {
             </form>
             <div className="home-popular">
               <span>Popular:</span>
-              {categories
-                .filter((c) =>
-                  ["plumbing", "cleaning", "electrical"].includes(c.slug),
-                )
-                .map((c) => (
+              {!discoveryLoading &&
+                !discoveryError &&
+                popularCategories(categories).map((c) => (
                   <Link key={c.slug} to={servicesUrl(c.slug)}>
                     {c.name}
                   </Link>
@@ -232,7 +234,7 @@ export function Home() {
             [
               Wallet,
               "A clear conversation",
-              "Agree on additional work and pay on site.",
+              "Approve extras, then pay the approved balance online.",
             ],
           ].map(([Icon, title, text]) => (
             <div key={title}>
@@ -262,45 +264,37 @@ export function Home() {
             </Link>
           </div>
           <div className="home-service-grid">
-            {categories.map((c) => (
-              <Link
-                key={c._id}
-                className="category-card home-service-card"
-                to={servicesUrl(c.slug)}
-              >
-                <img
-                  src={c.image}
-                  alt={`${c.name} service example`}
-                  loading="lazy"
-                  width="400"
-                  height="260"
-                />
-                <div>
-                  <h3>{c.name}</h3>
-                  <p className="home-service-description">{c.description}</p>
-                  <div className="home-service-price">
-                    <span>
-                      Starting from <strong>{money(c.price)}</strong>
-                    </span>
-                    <span className="home-card-arrow">
-                      <ArrowRight size={17} />
-                    </span>
+            {!discoveryLoading &&
+              !discoveryError &&
+              categories.map((c) => (
+                <Link
+                  key={c._id}
+                  className="category-card home-service-card"
+                  to={servicesUrl(c.slug)}
+                >
+                  <img
+                    src={c.image}
+                    alt={`${c.name} service example`}
+                    loading="lazy"
+                    width="400"
+                    height="260"
+                  />
+                  <div>
+                    <h3>{c.name}</h3>
+                    <p className="home-service-description">{c.description}</p>
+                    <div className="home-service-price">
+                      <span>
+                        Starting from <strong>{money(c.price)}</strong>
+                      </span>
+                      <span className="home-card-arrow">
+                        <ArrowRight size={17} />
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-          {!categories.length && (
-            <Empty
-              title="Services are being updated"
-              text="Please try again in a moment or contact us for help."
-              action={
-                <Link className="btn light" to="/contact">
-                  Contact support
                 </Link>
-              }
-            />
-          )}
+              ))}
+          </div>
+          <DiscoveryNotice scope="catalog" />
           <p className="home-price-note">
             Starting prices are visit estimates. Discuss any extra work or
             materials with your professional before agreeing to them.
@@ -456,21 +450,11 @@ export function Home() {
             for appointment availability.
           </p>
           <div className="provider-grid">
-            {featured.map((p) => (
-              <ProviderCard key={p._id} provider={p} />
-            ))}
+            {!discoveryLoading &&
+              !discoveryError &&
+              featured.map((p) => <ProviderCard key={p._id} provider={p} />)}
           </div>
-          {!featured.length && (
-            <Empty
-              title="No professionals listed here yet"
-              text="Try another city or contact us with your service enquiry."
-              action={
-                <Link className="btn light" to="/contact">
-                  Ask about a service
-                </Link>
-              }
-            />
-          )}
+          <DiscoveryNotice resultCount={featured.length} />
         </div>
       </section>
 
@@ -522,7 +506,7 @@ export function Home() {
               [
                 "04",
                 "Finish with confidence",
-                "Agree on any extra charges, pay on site and leave a review after the booking is marked Completed.",
+                "Approve extras and the final bill, pay the remaining balance online, and review the completed service. Work completion and payment settlement are separate.",
               ],
             ].map(([number, title, text]) => (
               <article key={number}>

@@ -7,7 +7,7 @@ services:
     region: singapore
     numInstances: 1
     buildCommand: npm ci --include=dev && npm run build
-    startCommand: npm run deploy:check && npm start
+    startCommand: export CLIENT_ORIGIN="$RENDER_EXTERNAL_URL" && npm run deploy:check && npm start
     healthCheckPath: /api/health
     autoDeployTrigger: "off"
     envVars:
@@ -21,6 +21,14 @@ services:
         value: "false"
       - key: AUTH_DELIVERY_MODE
         value: live
+      - key: EMAIL_TRANSPORT
+        value: brevo
+      - key: EMAIL_FROM_NAME
+        value: GharSeva
+      - key: EMAIL_FROM_ADDRESS
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
       - key: REQUIRE_VERIFIED_REGISTRATION
         value: "true"
       - key: REQUIRE_PROVIDER_IDENTITY

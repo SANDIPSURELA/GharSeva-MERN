@@ -1,3 +1,5 @@
+> **Email update, 27 October 2026:** the later [Render email milestone](EMAIL-OTP-RENDER.md) adds Brevo HTTPS and supersedes SMTP-only setup advice here. Earlier results below remain historical; no actual inbox delivery is implied.
+
 # Final hosting review - 26 October 2026
 
 **Not ready for hosting sign-off.** The code fixes and independent tests below are complete. Actual email receipt, Google/Apple authentication, Razorpay TEST deposits/balances, gateway-delivered webhooks, real MongoDB migration and browser demonstration are still blocked/unverified. No existing database was changed, seeded, reset or migrated. No live collection/payouts, publication, purchases, new external accounts or ZIP were created.

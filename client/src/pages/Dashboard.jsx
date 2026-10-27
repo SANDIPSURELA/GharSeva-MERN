@@ -1755,7 +1755,7 @@ function AdminContent({ section, data, busy, act, search, setSearch }) {
             icon={CheckCircle2}
             title="Completed service value"
             value={money(data.stats.serviceValue)}
-            note="Pay-on-site visit estimates"
+            note="Booking estimates, not captured payments"
           />
         </div>
         <div className="dashboard-section-title">

@@ -1,4 +1,6 @@
 import { existsSync } from "node:fs";
+import { emailReadiness } from "./email-delivery.js";
+import { paymentReadiness } from "./payment-gateway.js";
 import { fileURLToPath } from "node:url";
 
 export const clientDist = fileURLToPath(
@@ -77,27 +79,15 @@ export function inspectEnvironment(
       errors.push(
         "Production PAYMENTS_MODE must be disabled or razorpay_test. Live collection is not implemented.",
       );
-    if (
-      env.PAYMENTS_MODE === "razorpay_test" &&
-      (!/^rzp_test_[a-zA-Z0-9]+$/.test(env.RAZORPAY_KEY_ID || "") ||
-        !env.RAZORPAY_KEY_SECRET ||
-        !env.RAZORPAY_WEBHOOK_SECRET)
-    )
-      errors.push(
-        "Razorpay test mode requires a test key ID, key secret and webhook secret.",
-      );
+    if (env.PAYMENTS_MODE === "razorpay_test")
+      errors.push(...paymentReadiness(env).errors);
     if (requireBuild && !existsSync(`${dist}/index.html`))
       errors.push(
         "The React build is missing. Run npm run build before production startup.",
       );
-    if (
-      !env.SMTP_HOST ||
-      !env.SMTP_FROM ||
-      !env.SMTP_USER ||
-      !env.SMTP_PASSWORD
-    )
+    if (!emailReadiness(env).ready)
       warnings.push(
-        "Email verification, email login and recovery need SMTP setup and a real delivery test.",
+        "Email verification, password-plus-email-OTP login and recovery need the selected email transport configured and an owner-confirmed inbox test.",
       );
     if (
       !env.TWILIO_ACCOUNT_SID ||

@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 import sharp from "sharp";
 import { demoProviders } from "../../seed-data/demo-accounts.js";
-import { demoWorkImages } from "../../seed-data/demo-work-images.js";
+import {
+  demoWorkImages,
+  demoImageFor,
+} from "../../seed-data/demo-work-images.js";
 import {
   resolveWorkImages,
   publicWorkImageView,
@@ -367,7 +370,7 @@ test("older public API demo fingerprints resolve without writes, while edited/re
   assert.deepEqual([...frozen.portfolio], [legacyDemoImage(p.serviceId)]);
 });
 
-test("empty-database seed configuration creates twelve stable, distinct work-photo assignments", async () => {
+test("empty-database seed retains twelve stock photographs and adds twenty distinct service illustrations", async () => {
   const { seed } = await import("../src/seed.js");
   const { Category, Booking, Review, Settings } =
     await import("../src/models.js");
@@ -412,7 +415,7 @@ test("empty-database seed configuration creates twelve stable, distinct work-pho
           .filter((row) => row.profile.portfolio.length)
           .map((row) => row.profile.portfolio[0]),
       ).size,
-      12,
+      32,
     );
     for (const row of providers) {
       const p = demoProviders.find((p) => p.id === row.profile.demoProviderId);
@@ -420,7 +423,7 @@ test("empty-database seed configuration creates twelve stable, distinct work-pho
       assert.equal(row.email, p.email);
       assert.deepEqual(
         row.profile.portfolio,
-        demoWorkImages[p.id] ? [demoWorkImages[p.id].src] : [],
+        demoImageFor(p.id) ? [demoImageFor(p.id).src] : [],
       );
       assert.equal(row.profile.price, p.price);
       assert.equal(row.profile.status, "APPROVED");

@@ -7,10 +7,11 @@ import {
   ShieldCheck,
   Wallet,
 } from "lucide-react";
-import { api, prettyDate, label } from "../api";
+import { api, sessionClient, prettyDate, label } from "../api";
 import { useApp } from "../context";
 import { Modal } from "../components/UI";
 import "./Payments.css";
+import { openTestCheckout } from "../../../shared/razorpay-checkout.js";
 const cash = (n) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -75,12 +76,14 @@ function CombinedReceipt({ data }) {
       "Not a tax invoice or provider payout confirmation.",
       `Booking: GS-${b._id.slice(-8).toUpperCase()} | ${b.service}`,
       `Service status: ${b.status}`,
-      `Approved final total: ${s.total === null ? "Not billed" : cash(s.total)}`,
+      `Current final bill: ${s.total === null ? "Not billed" : cash(s.total)}`,
       `Deposit credit: ${cash(s.depositCredit)}`,
       `Balance captured: ${cash(s.balanceCaptured)}`,
       `Gross captured: ${cash(s.grossCaptured)}`,
       `Processed refunds: ${cash(s.processedRefunds)}`,
       `Current payment credit: ${cash(s.credit)}`,
+      "Captured awaiting allocation/reconciliation: " +
+        cash(s.unallocatedCaptured),
       `Remaining: ${s.remaining === null ? "Awaiting bill" : cash(s.remaining)}`,
       `Collection state: ${label(s.state)}`,
       `Provider payout: ${label(s.payoutStatus)}`,
@@ -103,7 +106,9 @@ function CombinedReceipt({ data }) {
       <h3>Combined payment summary</h3>
       <dl className="gs-pay__breakdown">
         <div>
-          <dt>Final bill total</dt>
+          <dt>
+            Final bill total ({label(data.bill?.status || "not submitted")})
+          </dt>
           <dd>{s.total === null ? "Awaiting bill" : cash(s.total)}</dd>
         </div>
         <div>
@@ -128,6 +133,12 @@ function CombinedReceipt({ data }) {
         requests are not processed refunds. Customer collection does not pay out
         the professional.
       </p>
+      {!!s.unallocatedCaptured && (
+        <p className="gs-pay__alert">
+          Captured but awaiting reconciliation: {cash(s.unallocatedCaptured)}.
+          This is not credited to the bill.
+        </p>
+      )}
       {s.settled && (
         <p className="gs-pay__pill">
           Settled bill v{b.billing?.settledVersion}. Later refunds are separate
@@ -439,7 +450,16 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
     [simulation, setSimulation] = useState(null),
     [reason, setReason] = useState(""),
     [refund, setRefund] = useState({ amount: "", reason: "" });
-  const panelRef = useRef(null);
+  const panelRef = useRef(null),
+    checkoutAbort = useRef(null),
+    mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      checkoutAbort.current?.abort();
+    };
+  }, []);
   useEffect(() => {
     const dialog = panelRef.current?.closest('[role="dialog"]');
     const previous = document.activeElement;
@@ -484,10 +504,14 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
     setError("");
     try {
       await fn();
+      if (!mounted.current) return;
       await load();
       onChanged();
     } catch (e) {
-      setError(e.message);
+      if (mounted.current) {
+        setError(e.message);
+        await load().catch(() => {});
+      }
     } finally {
       lock.current = false;
       setBusy(false);
@@ -513,38 +537,53 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
         setSimulation(r.payment);
         return;
       }
+      const context = sessionClient.context,
+        epoch = sessionClient.epoch;
+      const active = () =>
+        mounted.current &&
+        !sessionClient.locked &&
+        sessionClient.context === context &&
+        sessionClient.epoch === epoch;
       await loadCheckout();
+      if (!active())
+        throw new Error("The session changed. Refresh saved payment status.");
       setCheckoutOpen(true);
+      checkoutAbort.current = new AbortController();
       const p = r.payment;
-      const checkout = new window.Razorpay({
-        key: r.keyId,
-        order_id: p.orderId,
-        amount: p.amount,
-        currency: "INR",
-        name: "GharSeva",
-        description: `${purpose === "FINAL_BALANCE" ? "Approved bill balance" : "Visit deposit"} — TEST MODE`,
-        theme: { color: "#087f8c" },
-        handler: async (result) => {
-          setCheckoutOpen(false);
-          await act(() =>
-            api(`/payments/${p._id}/verify`, { method: "POST", body: result }),
-          );
-        },
-        modal: {
-          ondismiss: () => {
-            setCheckoutOpen(false);
-            setNotice(
-              "Checkout closed. The booking is unchanged. Reconcile before retrying.",
-            );
+      try {
+        const outcome = await openTestCheckout({
+          Checkout: window.Razorpay,
+          signal: checkoutAbort.current.signal,
+          active,
+          options: {
+            key: r.keyId,
+            order_id: p.orderId,
+            amount: p.amount,
+            currency: p.currency,
+            name: "GharSeva",
+            description:
+              (purpose === "FINAL_BALANCE"
+                ? "Approved bill balance"
+                : "Visit deposit") + " - TEST MODE",
+            theme: { color: "#087f8c" },
           },
-        },
-      });
-      checkout.on("payment.failed", () =>
-        setNotice(
-          "Payment attempt failed or is uncertain. The booking is unchanged; reconcile before retrying.",
-        ),
-      );
-      checkout.open();
+          verify: (result) =>
+            api("/payments/" + p._id + "/verify", {
+              method: "POST",
+              body: result,
+            }),
+          notify: setNotice,
+        });
+        if (active())
+          setNotice(
+            outcome.state === "closed"
+              ? "Checkout closed. Refresh saved payment status before retrying."
+              : "Server verification finished. Review the saved stage below; authorization alone is not captured payment.",
+          );
+      } finally {
+        checkoutAbort.current = null;
+        if (mounted.current) setCheckoutOpen(false);
+      }
     });
   const b = data?.booking,
     s = data?.summary,
@@ -1055,6 +1094,8 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
   );
 }
 export function Payments() {
+  const { user } = useApp();
+  const [events, setEvents] = useState([]);
   const [params, setParams] = useSearchParams(),
     [data, setData] = useState(null),
     [journeys, setJourneys] = useState(null),
@@ -1063,19 +1104,21 @@ export function Payments() {
     [error, setError] = useState("");
   const load = useCallback(async () => {
     try {
-      const [ledger, j] = await Promise.all([
+      const [ledger, j, unresolved] = await Promise.all([
         api(
           `/payments?${new URLSearchParams({ page: String(page), ...(mode ? { mode } : {}) })}`,
         ),
         api(`/payments/journeys?page=${page}`),
+        user?.role === "admin" ? api("/payments/events") : Promise.resolve([]),
       ]);
+      setEvents(unresolved || []);
       setData(ledger);
       setJourneys(j);
       setError("");
     } catch (e) {
       setError(e.message);
     }
-  }, [page, mode]);
+  }, [page, mode, user?.role]);
   useEffect(() => {
     load();
   }, [load]);
@@ -1101,7 +1144,8 @@ export function Payments() {
       </div>
       {error && (
         <p className="gs-pay__alert" role="alert">
-          {error} Restart the API if it still has the older payment routes.
+          {error} Refresh this page or contact support if payment records remain
+          unavailable.
         </p>
       )}
       {data && (
@@ -1112,6 +1156,27 @@ export function Payments() {
             <p>{data.options.notice}</p>
           </div>
         </div>
+      )}
+      {user?.role === "admin" && (
+        <section className="gs-pay__combined">
+          <h3>Unresolved webhook events</h3>
+          <p>
+            Read-only audit. Reconcile the saved order and bill before replaying
+            an unprocessed event. Captured funds must never be assigned by
+            editing paid flags.
+          </p>
+          {events.length ? (
+            events.map((event) => (
+              <p key={event._id}>
+                {event.event} | {event.resolution || "PENDING"} |{" "}
+                {event.eventKey} | Order {event.gatewayOrderId || "unresolved"}{" "}
+                | Payment {event.gatewayPaymentId || "unresolved"}
+              </p>
+            ))
+          ) : (
+            <p>No unresolved webhook events returned.</p>
+          )}
+        </section>
       )}
       <div className="gs-pay__tools">
         <h3>Booking payment journeys</h3>

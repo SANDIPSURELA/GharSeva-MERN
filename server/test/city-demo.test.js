@@ -55,7 +55,7 @@ function matches(r, f = {}) {
                         ? new RegExp(x, v.$options || "").test(a || "")
                         : op === "$options",
       );
-    return eq(a, v);
+    return Array.isArray(a) ? a.some((item) => eq(item, v)) : eq(a, v);
   });
 }
 const plain = (v) => (v?.toObject ? v.toObject() : v);
@@ -65,14 +65,15 @@ function query(v) {
   const q = {
     then(resolve, reject) {
       let out = v;
-      if (populate.length)
+      if (populate.length) {
         out = (Array.isArray(v) ? v : [v]).filter(Boolean).map((d) => {
           const row = plain(d);
           for (const key of populate)
             row[key] = plain(tables.get(User).find((u) => eq(u._id, row[key])));
           return row;
         });
-      else if (lean) out = Array.isArray(v) ? v.map(plain) : plain(v);
+        if (!Array.isArray(v)) out = out[0] || null;
+      } else if (lean) out = Array.isArray(v) ? v.map(plain) : plain(v);
       return Promise.resolve(out).then(resolve, reject);
     },
     select() {
@@ -723,4 +724,234 @@ test("generated local guide lists every fictional account and public discovery e
       "documents",
     ])
       assert.equal(p[field], undefined);
+});
+
+test("category-filtered discovery and assistant use only enabled categories and preserve rejected/suspended/disabled profiles", async () => {
+  const plumbing = await Category.findOne({ slug: "plumbing" });
+  const p = await User.findOne({ email: "ahm.plumbing1@example.com" });
+  for (const status of ["PENDING", "REJECTED"]) {
+    p.profile.status = status;
+    await p.save();
+    assert.ok(
+      !(await call("/providers?city=Ahmedabad&category=plumbing")).data.some(
+        (r) => r._id === String(p._id),
+      ),
+    );
+  }
+  p.profile.status = "APPROVED";
+  const oldCategories = [...p.profile.categories];
+  p.profile.categories = ["plumbing", "electrical"];
+  await p.save();
+  assert.ok(
+    (await call("/providers?city=Ahmedabad&category=electrical")).data.some(
+      (r) => r._id === String(p._id),
+    ),
+  );
+  p.profile.categories = oldCategories;
+  await p.save();
+  plumbing.enabled = false;
+  await plumbing.save();
+  assert.deepEqual(
+    (await call("/providers?city=Ahemdabad&category=plumbing")).data,
+    [],
+  );
+  assert.ok(
+    !(await call("/categories")).data.some((c) => c.slug === "plumbing"),
+  );
+  assert.equal(
+    (await call("/assistant/matches?category=plumbing&city=Ahmedabad")).status,
+    400,
+  );
+  const before = JSON.stringify(plain(plumbing));
+  await expandDemo({ apply: true });
+  assert.equal(
+    JSON.stringify(plain(plumbing)),
+    before,
+    "disabled decision changed",
+  );
+  plumbing.enabled = true;
+  await plumbing.save();
+  const selected = await call("/providers?city=  ahemdabad &category=plumbing");
+  assert.ok(selected.data.length >= 1);
+  assert.ok(selected.data.every((p) => p.categories.includes("plumbing")));
+  assert.deepEqual(
+    (await call("/providers?city=Ahmedabad&category=unknown")).data,
+    [],
+  );
+});
+
+test("one full isolated booking journey retains provider ownership, admin read access, OTP and two distinct simulated collections", async () => {
+  mock.method(models.Payment.collection, "indexes", async () => [
+    { name: "_id_", key: { _id: 1 }, unique: true },
+    {
+      name: "payment_booking_purpose",
+      key: { booking: 1, purpose: 1 },
+      unique: true,
+    },
+  ]);
+  const p = await User.findOne({ email: "ahm.plumbing1@example.com" });
+  // Advance only the isolated fixture send window; no real waiting or production rate-limit change.
+  for (const row of tables.get(models.ContactThrottle)) {
+    row.nextAllowedAt = new Date(0);
+    row.windowStart = new Date(0);
+    row.count = 0;
+  }
+  const owner = await login("customer@gharseva.com", "Customer123");
+  const pro = await login(p.email, "Provider123");
+  const wrong = await login("ahm.plumbing2@example.com", "Provider123");
+  const admin = await login("admin@gharseva.com", "Admin12345");
+  const created = await call("/bookings", {
+    ...owner,
+    body: {
+      providerId: String(p._id),
+      category: "plumbing",
+      date: indiaDate(7),
+      time: "14:00",
+      city: "  Ahemdabad ",
+      address: "42 Fictional Sample Street, Ahmedabad",
+      notes: "Isolated milestone fixture only",
+    },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const id = created.data._id;
+  const status = (auth, value, code) =>
+    call("/bookings/" + id + "/status", {
+      ...auth,
+      method: "PATCH",
+      body: { status: value, code },
+    });
+  const order = (purpose = "VISIT_DEPOSIT") =>
+    call("/payments/booking/" + id + "/order", {
+      ...owner,
+      body: {
+        purpose,
+        acceptDeposit: true,
+        acceptBalance: true,
+        amount: 1,
+      },
+    });
+  assert.equal((await order()).status, 409, "PENDING must not be payable");
+  assert.equal((await status(wrong, "ACCEPTED")).status, 403);
+  assert.equal((await status(admin, "ACCEPTED")).status, 403);
+  assert.equal((await status(pro, "ACCEPTED")).status, 200);
+  for (const auth of [owner, pro, admin]) {
+    const list = await call("/bookings", auth);
+    assert.equal(list.status, 200);
+    assert.equal(list.data.find((b) => b._id === id).status, "ACCEPTED");
+  }
+  const unauthorized = await call("/payments/booking/" + id, wrong);
+  assert.equal(unauthorized.status, 404);
+  process.env.PAYMENTS_MODE = "disabled";
+  const unavailable = await order();
+  assert.equal(unavailable.status, 503);
+  assert.ok(unavailable.data.message);
+  process.env.PAYMENTS_MODE = "demo";
+  const deposit = await order();
+  assert.equal(deposit.status, 200, JSON.stringify(deposit.data));
+  assert.equal(deposit.data.payment.amount, 9900);
+  const pay = (entry, outcome) =>
+    call("/payments/" + entry._id + "/demo", { ...owner, body: { outcome } });
+  assert.equal((await status(pro, "ON_THE_WAY")).status, 200);
+  const ownBooking = (await call("/bookings", owner)).data.find(
+    (b) => b._id === id,
+  );
+  const visitCode = ownBooking.visitCode;
+  assert.equal((await status(pro, "IN_PROGRESS", visitCode)).status, 409);
+  assert.equal((await pay(deposit.data.payment, "FAILED")).status, 200);
+  assert.equal((await status(pro, "IN_PROGRESS", visitCode)).status, 409);
+  assert.equal((await pay(deposit.data.payment, "CAPTURED")).status, 200);
+  assert.equal((await status(pro, "IN_PROGRESS", "000000")).status, 400);
+  assert.equal((await status(pro, "IN_PROGRESS", visitCode)).status, 200);
+  assert.equal((await status(pro, "COMPLETED")).status, 200);
+  const submitted = await call("/payments/booking/" + id + "/bill", {
+    ...pro,
+    body: {
+      requestId: "catalog-fixture-bill-001",
+      total: 1,
+      items: [
+        {
+          kind: "SERVICE",
+          label: "Fictional plumbing visit",
+          quantity: 1,
+          unitAmount: 34900,
+        },
+      ],
+    },
+  });
+  assert.equal(submitted.status, 201, JSON.stringify(submitted.data));
+  assert.equal(submitted.data.bill.total, 34900);
+  assert.equal((await order("FINAL_BALANCE")).status, 409);
+  const approve = await call("/payments/booking/" + id + "/bill/decision", {
+    ...owner,
+    body: {
+      version: 1,
+      decision: "APPROVED",
+      confirm: true,
+    },
+  });
+  assert.equal(approve.status, 200, JSON.stringify(approve.data));
+  const balance = await order("FINAL_BALANCE");
+  assert.equal(balance.status, 200, JSON.stringify(balance.data));
+  assert.equal(balance.data.payment.amount, 25000);
+  assert.notEqual(balance.data.payment._id, deposit.data.payment._id);
+  assert.notEqual(balance.data.payment.orderId, deposit.data.payment.orderId);
+  assert.equal((await pay(balance.data.payment, "CAPTURED")).status, 200);
+  const summary = (await call("/payments/booking/" + id, owner)).data;
+  assert.equal(summary.summary.grossCaptured, 34900);
+  assert.equal(summary.summary.remaining, 0);
+  assert.equal(summary.summary.payoutStatus, "NOT_INITIATED");
+  assert.equal(summary.payments.length, 2);
+  assert.equal(summary.booking.status, "COMPLETED");
+});
+
+test("fresh reserved-address expansion creates a private ignored guide only for new fixture accounts and repeat preserves everything", async () => {
+  const prior = new Map([...tables].map(([model, rows]) => [model, [...rows]]));
+  try {
+    for (const rows of tables.values()) rows.length = 0;
+    const passwords = {
+      customer: "FixtureCustomer7!",
+      provider: "FixtureProvider7!",
+      admin: "FixtureAdmin7!",
+    };
+    const report = await expandDemo({
+      apply: true,
+      passwords,
+      testOnlyContacts: true,
+    });
+    assert.equal(report.filter((r) => r.created).length, 34);
+    assert.ok(tables.get(User).every((u) => u.email.endsWith("@example.test")));
+    assert.equal(tables.get(Booking).length, 0);
+    const { writeLocalDemoGuide } =
+      await import("../../scripts/local-demo-guide.js");
+    const guide = await writeLocalDemoGuide(report, passwords, {
+      database: "gharseva_test_catalog_in_memory",
+      testOnlyContacts: true,
+      fixture: true,
+    });
+    assert.ok(guide.endsWith("catalog-fixture-accounts.local.md"));
+    const text = readFileSync(guide, "utf8");
+    assert.match(text, /IN-MEMORY TEST FIXTURE ONLY/);
+    assert.ok(text.includes("ahm-plumbing-1@example.test"));
+    const snapshot = JSON.stringify(
+      [...tables].map(([m, rows]) => [m.modelName, rows.map(plain)]),
+    );
+    const again = await expandDemo({
+      apply: true,
+      passwords: { provider: "DifferentFixture7!" },
+      testOnlyContacts: true,
+    });
+    assert.equal(again.filter((r) => r.created).length, 0);
+    assert.equal(await writeLocalDemoGuide(again, {}, { fixture: true }), null);
+    assert.equal(
+      JSON.stringify(
+        [...tables].map(([m, rows]) => [m.modelName, rows.map(plain)]),
+      ),
+      snapshot,
+    );
+  } finally {
+    for (const [model, rows] of tables) {
+      rows.length = 0;
+      rows.push(...prior.get(model));
+    }
+  }
 });

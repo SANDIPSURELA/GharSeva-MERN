@@ -1,16 +1,18 @@
 # GharSeva hosting and deployment — 24 October 2026
 
+**Email milestone updated 27 October 2026:** see [EMAIL-OTP-RENDER.md](EMAIL-OTP-RENDER.md) for the selected Brevo HTTPS transport, exact Render variables and owner inbox test. Historical verification counts below are not results for this update.
+
 This package prepares the existing MERN project for a single public HTTPS URL. It does not create a hosting account, publish the repository, buy a plan, change your database, or claim a deployed URL. All earlier pages and workflows are included.
 
 ## What runs where
 
 The React production build and Express API run together as **one Node web service**. Browser requests use the same origin and `/api`, so no separate frontend host, frontend database secret or cross-site session setup is needed. Express binds to `0.0.0.0` and the host's `PORT`. MongoDB Atlas holds accounts, bookings, application drafts, payment records and uploaded files, including encrypted identity images. These uploads do not depend on Render's local disk.
 
-The included `render.yaml` is an account-side deployment recipe. Its Free plan is for an initial preview; it creates no resources until you submit it. Render Free sleeps after inactivity, has no service shell, and blocks the common SMTP ports used by this project. **For working email verification/recovery through the current SMTP adapter, select suitable paid compute with permitted outbound SMTP, or arrange a separately supported delivery integration.** Do not present Free preview hosting as a complete production service. OCR memory/latency must also be measured on the selected host. Nothing in this update purchases a plan.
+The included `render.yaml` is an account-side deployment recipe. Its Free plan is for an initial preview; it creates no resources until you submit it. Render Free sleeps after inactivity, has no service shell, and blocks the common SMTP ports used by this project. **Use EMAIL_TRANSPORT=brevo for HTTPS email delivery on Render Free.** SMTP remains available on hosts that permit its ports. Brevo account/API credentials, sender verification and owner-confirmed inbox receipt are required; configuration alone does not prove delivery. Do not present Free preview hosting as a complete production service. OCR memory/latency must also be measured on the selected host. Nothing in this update purchases a plan.
 
 ## 1. Review the local package
 
-Extract the whole folder. Do not merge different ZIP versions file by file. On Windows, open a terminal inside `GharSeva-MERN`:
+Work in the existing source folder; do not overwrite newer work with an older ZIP. On Windows, open a terminal inside `GharSeva-MERN`:
 
 ```powershell
 npm.cmd ci
@@ -51,17 +53,17 @@ Create/select the Render service, then open its **Connect → Outbound** tab. Ad
 
 Sign into your own [Render dashboard](https://dashboard.render.com). Either select **New → Blueprint** and connect the repository containing `render.yaml`, or choose **New → Web Service** and enter these values manually:
 
-| Setting | Value |
-| --- | --- |
-| Language | Node |
-| Root directory | Repository root; leave blank if the files are already at root |
-| Region | Singapore, or your chosen region near the database |
-| Node version | `24.22.1`, pinned in `.node-version` and the Blueprint |
-| Build command | `npm ci --include=dev && npm run build` |
-| Start command | `npm run deploy:check && npm start` |
-| Health check | `/api/health` |
-| Instances | One; current rate limiting and OCR scheduling are process-local |
-| Auto deploy | Off initially |
+| Setting        | Value                                                                              |
+| -------------- | ---------------------------------------------------------------------------------- |
+| Language       | Node                                                                               |
+| Root directory | Repository root; leave blank if the files are already at root                      |
+| Region         | Singapore, or your chosen region near the database                                 |
+| Node version   | `24.22.1`, pinned in `.node-version` and the Blueprint                             |
+| Build command  | `npm ci --include=dev && npm run build`                                            |
+| Start command  | `export CLIENT_ORIGIN="$RENDER_EXTERNAL_URL" && npm run deploy:check && npm start` |
+| Health check   | `/api/health`                                                                      |
+| Instances      | One; current rate limiting and OCR scheduling are process-local                    |
+| Auto deploy    | Off initially                                                                      |
 
 Choose the plan deliberately in your account. The Blueprint's `plan: free` is only a preview default. Its limits do not meet every workflow's needs. No persistent disk is required for the current MongoDB-backed upload design. Do not create a Render Postgres database; this is a MongoDB project.
 
@@ -71,32 +73,36 @@ Copy the **actual assigned public URL**. Service-name availability can change it
 
 Use Render's private environment settings. `server/.env.production.example` is a reference, not an active secrets file. Do not upload a real `.env` to Git.
 
-| Variable | Value/purpose |
-| --- | --- |
-| `NODE_ENV` | `production` |
-| `MONGODB_URI` | Your Atlas URI with the correct persistent database name |
-| `JWT_SECRET` | Stable, randomly generated secret of at least 32 characters; Blueprint can generate it for a new installation |
-| `IDENTITY_STORAGE_KEY` | Stable 64-character hex key; retain the existing key for existing images |
-| `CLIENT_ORIGIN` | Exact public HTTPS origin; no path or trailing slash |
-| `TRUST_PROXY_HOPS` | `1` for this documented Render topology; local direct server uses `0` |
-| `GHARSEVA_DEMO` | `false` |
-| `AUTH_DELIVERY_MODE` | `live` |
-| `REQUIRE_VERIFIED_REGISTRATION` | `true` |
-| `REQUIRE_PROVIDER_IDENTITY` | `true` |
-| `PAYMENTS_MODE` | `disabled` until your Razorpay test account is configured |
+| Variable                        | Value/purpose                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                      | `production`                                                                                                  |
+| `MONGODB_URI`                   | Your Atlas URI with the correct persistent database name                                                      |
+| `JWT_SECRET`                    | Stable, randomly generated secret of at least 32 characters; Blueprint can generate it for a new installation |
+| `IDENTITY_STORAGE_KEY`          | Stable 64-character hex key; retain the existing key for existing images                                      |
+| `CLIENT_ORIGIN`                 | Exact public HTTPS origin; no path or trailing slash                                                          |
+| `TRUST_PROXY_HOPS`              | `1` for this documented Render topology; local direct server uses `0`                                         |
+| `GHARSEVA_DEMO`                 | `false`                                                                                                       |
+| `AUTH_DELIVERY_MODE`            | `live`                                                                                                        |
+| `REQUIRE_VERIFIED_REGISTRATION` | `true`                                                                                                        |
+| `REQUIRE_PROVIDER_IDENTITY`     | `true`                                                                                                        |
+| `PAYMENTS_MODE`                 | `disabled` until your Razorpay test account is configured                                                     |
 
 Generate a **new installation's** identity key locally with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Do not use a newly generated key for existing ciphertext. For a manually configured new JWT secret, use 48 random bytes in hex. Keep secrets out of chat, screenshots and commits. Never change production to test/demo authentication to make public OTP appear to work.
 
 `TRUST_PROXY_HOPS` affects client-IP rate limits. Do not set it to `true`. Recheck the proxy path if adding a CDN, another reverse proxy or another host; the existing hop count is not a universal configuration. Use one canonical domain because writes from any different Origin are rejected. On a domain change, update `CLIENT_ORIGIN`, redirect the previous domain through your host, and update Firebase/payment callbacks.
 
-### Optional services, configured separately
+### Required email; optional services configured separately
 
-- **Email:** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`. Verify the sending domain and a real recipient delivery. Standard SMTP on 465/587 needs a host that permits those ports. Existing account password login still works without SMTP, but new email verification, invitations' verification step and recovery do not become functional just because hosting is online.
+- **Email (required for password login):** on Render Free set EMAIL_TRANSPORT=brevo, BREVO_API_KEY, EMAIL_FROM_ADDRESS, EMAIL_FROM_NAME=GharSeva, with AUTH_DELIVERY_MODE=live and GHARSEVA_DEMO=false. SMTP is a separate alternative using only SMTP_* settings when selected. Customer/provider/admin password login always requires a stored-email OTP, including mobile identifiers. No Twilio configuration is needed. See [EMAIL-OTP-RENDER.md](EMAIL-OTP-RENDER.md).
 - **SMS:** configure Twilio Verify settings in [REGISTRATION-INTEGRATION-SETUP.md](REGISTRATION-INTEGRATION-SETUP.md). No SMS account is provided.
 - **Google/Apple:** add the public hostname to Firebase's authorized domains; configure the enabled provider and server credentials. Use a hosting secret file or the documented private-key environment settings. Never bundle a service-account JSON into React.
 - **AI:** guided matching works without a key. Optional live AI uses server-side settings in [CUSTOMER-ASSISTANT-UPDATE.md](CUSTOMER-ASSISTANT-UPDATE.md).
-- **Payments:** keep `disabled` or configure `razorpay_test` with your test keys. Set the signed webhook to `https://YOUR-ACTUAL-HOST/api/payments/webhook`; follow [PAYMENTS-UPDATE.md](PAYMENTS-UPDATE.md). Real collection remains unavailable.
+- **Payments:** keep `disabled` or configure `razorpay_test` with your test keys. Set the signed webhook to `https://YOUR-ACTUAL-HOST/api/payments/webhook`; follow [RAZORPAY-TWO-STAGE-VERIFICATION.md](../RAZORPAY-TWO-STAGE-VERIFICATION.md). New bookings require deposit and approved balance even while checkout is unavailable. Run `npm run integrations:check -- --payments-ready` for configuration validation only. Real collection remains unavailable.
 - **Aadhaar:** local OCR/name comparison remains assisted human review; hosting does not activate UIDAI authentication.
+
+## Catalog repair for an existing database
+
+An existing admin does not prove the category catalog was initialized. Use the separate, read-only-by-default reconciliation workflow in [CATALOG-AHMEDABAD-REPAIR.md](../CATALOG-AHMEDABAD-REPAIR.md). It reports missing/disabled/conflicting categories and requires an exact database-name confirmation before insert-only apply. Do not rerun bootstrap or seed to repair the catalog. Never expand fictional providers into the hosted database; demo writes are restricted to explicit non-production loopback databases.
 
 ## 6. Create the first admin only if none exists
 
@@ -117,7 +123,7 @@ try { npm.cmd run deploy:bootstrap } finally {
 }
 ```
 
-Substitute your own details. Enter the password at the hidden prompt, not inside a command or chat. Run from one terminal once, not as a build/start hook or concurrently. On supported paid services the same command can be run in the host's private service shell using temporary private settings; remove all `BOOTSTRAP_*` settings afterward. Free Render has no service shell, so use the local Atlas route above. The admin login is `/admin/login` and remains password-only. Bootstrap does not solve admin MFA or contact recovery; those remain separate improvements. Do not run `npm run seed` against the public production database.
+Substitute your own details. Enter the password at the hidden prompt, not inside a command or chat. Run from one terminal once, not as a build/start hook or concurrently. On supported paid services the same command can be run in the host's private service shell using temporary private settings; remove all `BOOTSTRAP_*` settings afterward. Free Render has no service shell, so use the local Atlas route above. The legacy /admin/login redirects to shared /login; admins also require password followed by registered-email OTP. Sensitive actions retain session-bound password-plus-email-OTP reauthentication. Bootstrap does not bypass email or solve recovery. Do not run `npm run seed` against the public production database.
 
 ## 7. Verify the actual deployment
 

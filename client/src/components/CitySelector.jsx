@@ -29,7 +29,11 @@ export function CitySelector() {
     }
   };
   return (
-    <section className="container city-selector" aria-label="Service city">
+    <section
+      id="service-city"
+      className="container city-selector"
+      aria-label="Service city"
+    >
       <strong>
         {required
           ? "Select your city once to continue"

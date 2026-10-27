@@ -1,3 +1,5 @@
+> **Selected email transport:** see [EMAIL-OTP-RENDER.md](EMAIL-OTP-RENDER.md). Brevo HTTPS supports Render Free with no SMTP or Twilio requirement. SMTP-only guidance below applies only when EMAIL_TRANSPORT=smtp.
+
 > Current integration review: [FINAL-HOSTING-REVIEW.md](FINAL-HOSTING-REVIEW.md). The shared login and security contract below supersede older milestone descriptions.
 
 # Registration integrations: setup and testing

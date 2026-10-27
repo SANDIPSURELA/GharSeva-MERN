@@ -240,6 +240,8 @@ const challengeSchema = new Schema(
     digest: { type: String, select: false },
     attempts: { type: Number, default: 0 },
     used: { type: Boolean, default: false },
+    // A code cannot be consumed until the selected delivery provider accepts it.
+    ready: { type: Boolean, default: false },
     expiresAt: { type: Date, required: true },
   },
   options,
@@ -600,6 +602,13 @@ const paymentEventSchema = new Schema(
   {
     eventKey: { type: String, required: true, unique: true },
     bodyHash: { type: String, required: true },
+    gatewayOrderId: String,
+    gatewayPaymentId: String,
+    resolution: {
+      type: String,
+      enum: ["PENDING", "UNMATCHED", "RECONCILIATION_REQUIRED", "PROCESSED"],
+      default: "PENDING",
+    },
     payment: ref("Payment"),
     event: String,
     processedAt: Date,

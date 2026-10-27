@@ -1,3 +1,5 @@
+import { DiscoveryNotice } from "../components/DiscoveryNotice";
+import { discoveryState } from "../../../shared/discovery-state.js";
 import { supportedCities, citySelection } from "../../../shared/cities.js";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -39,8 +41,16 @@ const starters = [
 ];
 const resumeKey = "gs_assistant_public_selection";
 export function ServiceAssistant() {
-  const { user, categories, providers, selectedCity, setSelectedCity } =
-      useApp(),
+  const {
+      user,
+      categories,
+      providers,
+      selectedCity,
+      setSelectedCity,
+      discoveryLoading,
+      discoveryError,
+      refresh,
+    } = useApp(),
     navigate = useNavigate(),
     [params] = useSearchParams();
   const [options, setOptions] = useState({
@@ -192,6 +202,20 @@ export function ServiceAssistant() {
   };
   const update = (key, value) => turn({ type: "preferences", [key]: value });
   const blocked = busy || bookingBusy;
+  if (
+    discoveryState({
+      loading: discoveryLoading,
+      error: discoveryError,
+      categories,
+      scope: "catalog",
+    }) !== "ready"
+  )
+    return (
+      <div className="container section">
+        <h1>Find the right home service</h1>
+        <DiscoveryNotice scope="catalog" />
+      </div>
+    );
   return (
     <div className="gs-assistant gs-assistant--conversational">
       <section className="gs-assistant__intro container">
@@ -939,7 +963,9 @@ function AssistantBooking({
           <p className="gs-assistant__review-note">
             This draft expires in 20 minutes and does not hold the slot.
             Additional work/materials need agreement. The professional must
-            accept the PENDING request. No payment is initiated.
+            accept the PENDING request. Pay the required deposit online before
+            visit verification and work, then the approved remaining balance
+            online after completion. No payment is initiated here.
           </p>
           <div className="gs-assistant__booking-actions">
             <button

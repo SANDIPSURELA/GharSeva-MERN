@@ -1,3 +1,5 @@
+import { DiscoveryNotice } from "../components/DiscoveryNotice";
+import { discoveryState } from "../../../shared/discovery-state.js";
 import { supportedCities, canonicalCity } from "../../../shared/cities.js";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -19,7 +21,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../context";
 import { money } from "../api";
-import { ProviderCard, Field, Empty } from "../components/UI";
+import { ProviderCard, Field } from "../components/UI";
 import "./Services.css";
 
 const guides = {
@@ -131,6 +133,8 @@ export function Services() {
     categories,
     comparison,
     error,
+    discoveryLoading,
+    discoveryError,
     refresh,
     selectedCity,
     setSelectedCity,
@@ -187,6 +191,14 @@ export function Services() {
     pageCount,
   );
   const visible = matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const listingState = discoveryState({
+    loading: discoveryLoading,
+    error: discoveryError || error,
+    categories,
+    providers,
+    city,
+    resultCount: matching.length,
+  });
   const update = (key, value) => {
     if (key === "city") setSelectedCity(value);
     const next = new URLSearchParams(latestParams.current);
@@ -278,7 +290,9 @@ export function Services() {
               <span>
                 Starting visit estimates.
                 <br />
-                <strong>Agree on extra work. Pay on site.</strong>
+                <strong>
+                  Deposit after acceptance. Approved balance online.
+                </strong>
               </span>
             </div>
           </div>
@@ -386,9 +400,13 @@ export function Services() {
                   onChange={(e) => update("category", e.target.value)}
                 >
                   <option value="">All services</option>
-                  {category && !selectedCategory && (
-                    <option value={category}>Service no longer listed</option>
-                  )}
+                  {!discoveryLoading &&
+                    !discoveryError &&
+                    categories.length > 0 &&
+                    category &&
+                    !selectedCategory && (
+                      <option value={category}>Service no longer listed</option>
+                    )}
                   {categories.map((c) => (
                     <option key={c.slug} value={c.slug}>
                       {c.name}
@@ -476,7 +494,13 @@ export function Services() {
                   });
                 }}
               >
-                Show {matching.length} professional
+                Show{" "}
+                {discoveryLoading
+                  ? "Loading"
+                  : discoveryError
+                    ? "Unavailable"
+                    : matching.length}{" "}
+                professional
                 {matching.length === 1 ? "" : "s"}
                 <ArrowRight size={16} />
               </button>
@@ -506,18 +530,25 @@ export function Services() {
                 </div>
                 <h2>Know the job before you book.</h2>
                 <p>
-                  {selectedCategory.description.replace(/[.!?]$/, "")}. Each
-                  professional lists their own skills and starting visit price.
+                  {String(
+                    selectedCategory.description ||
+                      "Confirm the job details with your professional",
+                  ).replace(/[.!?]$/, "")}
+                  . Each professional lists their own skills and starting visit
+                  price.
                 </p>
                 <div className="services-common-jobs">
-                  {(guide?.jobs || [selectedCategory.description]).map(
-                    (job) => (
-                      <span key={job}>
-                        <Check size={14} />
-                        {job}
-                      </span>
-                    ),
-                  )}
+                  {(
+                    guide?.jobs ||
+                    (selectedCategory.description
+                      ? [selectedCategory.description]
+                      : [])
+                  ).map((job) => (
+                    <span key={job}>
+                      <Check size={14} />
+                      {job}
+                    </span>
+                  ))}
                 </div>
                 <div className="services-prepare">
                   <CalendarDays size={18} />
@@ -531,21 +562,25 @@ export function Services() {
                 </div>
               </article>
             )}
-            {category && !selectedCategory && (
-              <div className="services-unlisted card">
-                <h2>This service is no longer listed.</h2>
-                <p>
-                  Browse an enabled category or contact support about the work
-                  you need.
-                </p>
-                <button
-                  className="btn light small"
-                  onClick={() => update("category", "")}
-                >
-                  Browse all services
-                </button>
-              </div>
-            )}
+            {!discoveryLoading &&
+              !discoveryError &&
+              categories.length > 0 &&
+              category &&
+              !selectedCategory && (
+                <div className="services-unlisted card">
+                  <h2>This service is no longer listed.</h2>
+                  <p>
+                    Browse an enabled category or contact support about the work
+                    you need.
+                  </p>
+                  <button
+                    className="btn light small"
+                    onClick={() => update("category", "")}
+                  >
+                    Browse all services
+                  </button>
+                </div>
+              )}
             <div className="listing-toolbar">
               <div className="search-field">
                 <Search size={18} />
@@ -596,69 +631,38 @@ export function Services() {
                 </button>
               </div>
             )}
-            <div className="services-results-heading">
-              <div role="status" aria-live="polite">
-                <h2>
-                  {matching.length} professional
-                  {matching.length === 1 ? "" : "s"}
-                  {city ? ` in ${city}` : " found"}
-                </h2>
-                <p>
-                  {matching.length
-                    ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, matching.length)}. Read skills and reviews before choosing.`
-                    : "Try adjusting a filter or exploring a different service."}
-                </p>
+            {["ready", "no-results", "empty-city"].includes(listingState) && (
+              <div className="services-results-heading">
+                <div role="status" aria-live="polite">
+                  <h2>
+                    {matching.length} professional
+                    {matching.length === 1 ? "" : "s"}
+                    {city ? ` in ${city}` : " found"}
+                  </h2>
+                  <p>
+                    {matching.length
+                      ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, matching.length)}. Read skills and reviews before choosing.`
+                      : "Try adjusting a filter or exploring a different service."}
+                  </p>
+                </div>
+                {compared > 0 && (
+                  <Link className="btn light small" to="/compare">
+                    <Scale size={16} />
+                    Compare {compared}
+                  </Link>
+                )}
               </div>
-              {compared > 0 && (
-                <Link className="btn light small" to="/compare">
-                  <Scale size={16} />
-                  Compare {compared}
-                </Link>
-              )}
-            </div>
-            {error ? (
-              <Empty
-                title="We couldn't load the listings"
-                text="Please retry the connection to see the available professionals."
-                action={
-                  <button className="btn light" onClick={refresh}>
-                    Retry listings
-                  </button>
-                }
-              />
-            ) : matching.length ? (
+            )}
+            {listingState !== "ready" ? (
+              <DiscoveryNotice resultCount={matching.length} onClear={clear} />
+            ) : (
               <div className="provider-grid listing-grid">
                 {visible.map((p) => (
                   <ProviderCard key={p._id} provider={p} showDetails />
                 ))}
               </div>
-            ) : (
-              <div className="services-no-results card">
-                <span className="services-empty-icon">
-                  <Search size={29} />
-                </span>
-                <h2>No matching professionals yet.</h2>
-                <p>
-                  {city && !cities.includes(city)
-                    ? `There are currently no listed professionals in ${city}. Try a listed city or ask support about the service you need.`
-                    : rating
-                      ? "Try lowering the minimum rating. Professionals without completed-booking reviews are hidden by this filter."
-                      : "Try another category, a wider budget or a shorter search. You can remove one filter at a time above."}
-                </p>
-                <div>
-                  <button className="btn" onClick={clear}>
-                    Clear all filters
-                  </button>
-                  <Link className="btn light" to="/finder">
-                    Help me find a service <Sparkles size={16} />
-                  </Link>
-                </div>
-                <Link className="text-link" to="/contact">
-                  Ask support about this job <ArrowRight size={15} />
-                </Link>
-              </div>
             )}
-            {matching.length > PAGE_SIZE && (
+            {listingState === "ready" && matching.length > PAGE_SIZE && (
               <nav
                 className="services-pagination"
                 aria-label="Results pagination"

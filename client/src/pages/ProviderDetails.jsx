@@ -644,7 +644,9 @@ export function ProviderDetails() {
                   {money(p.price)}
                   <small> / visit</small>
                 </strong>
-                <span>Starting estimate · pay on site</span>
+                <span>
+                  Starting estimate · deposit + approved balance online
+                </span>
               </div>
               {!p.available ? (
                 <div className="pp-appointment-message">

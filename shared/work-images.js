@@ -1,5 +1,5 @@
 import { demoProviders } from "../seed-data/demo-accounts.js";
-import { demoWorkImages } from "../seed-data/demo-work-images.js";
+import { demoImageFor } from "../seed-data/demo-work-images.js";
 
 export const workPhotoPlaceholder = "/images/work-photo-placeholder.svg";
 export const isWorkUpload = (src) =>
@@ -74,7 +74,7 @@ export function resolveWorkImages(provider, { allowedUploads } = {}) {
     publicView: allowedUploads === undefined,
   });
   if (!demo) return uploads;
-  const sample = demoWorkImages[demo.id];
+  const sample = demoImageFor(demo.id);
   if (!sample) return uploads;
   const hasSample =
     unique.length === 0 ||
@@ -83,11 +83,16 @@ export function resolveWorkImages(provider, { allowedUploads } = {}) {
   if (hasSample)
     uploads.push({
       src: sample.src,
-      kind: "sample",
-      label: "Sample photograph",
+      kind: sample.kind || "sample",
+      label:
+        sample.kind === "illustration"
+          ? "Demo service illustration"
+          : "Sample photograph",
       alt:
         sample.description +
-        " - illustrative stock photograph, not verified work by " +
+        (sample.kind === "illustration"
+          ? " - fictional illustration, not verified work by "
+          : " - illustrative stock photograph, not verified work by ") +
         provider.name,
     });
   return uploads;

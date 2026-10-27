@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 import { randomBytes, createHmac } from "node:crypto";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import {
+  createIsolatedMongo,
+  connectIsolatedMongo,
+} from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import {
   User,
@@ -110,17 +113,8 @@ before(async () => {
   process.env.NODE_ENV = "test";
   process.env.GHARSEVA_DEMO = "true";
   process.env.AUTH_DELIVERY_MODE = "test";
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri(), { serverSelectionTimeoutMS: 10000 });
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
   await Promise.all([
     User.init(),
     Booking.init(),
@@ -132,7 +126,7 @@ before(async () => {
 after(async () => {
   if (server) await new Promise((r) => server.close(r));
   await mongoose.disconnect();
-  if (db) await db.stop();
+  if (db) await db?.stop();
 });
 beforeEach(async () => {
   if (server) await new Promise((r) => server.close(r));
@@ -889,4 +883,158 @@ test("disposable Mongo refuses unsafe migration data/indexes before changing any
       await collection.drop();
     }
   }
+});
+
+test("connected isolated database: two gateway-fixture stages, visit OTP, real signatures, webhook race and all-role receipts", async () => {
+  gatewayMode();
+  const savedOrders = new Map(),
+    savedPayments = new Map();
+  Object.assign(gateway, {
+    createOrder: async (p) => {
+      const o = {
+        id: "order_" + p._id,
+        amount: p.amount,
+        currency: "INR",
+        receipt: p.receipt,
+        status: "created",
+      };
+      savedOrders.set(o.id, o);
+      return structuredClone(o);
+    },
+    fetchOrder: async (id) => structuredClone(savedOrders.get(id)),
+    findOrder: async (receipt) =>
+      structuredClone(
+        [...savedOrders.values()].find((o) => o.receipt === receipt),
+      ),
+    fetchPayment: async (id) => structuredClone(savedPayments.get(id)),
+    orderPayments: async (id) =>
+      structuredClone(
+        [...savedPayments.values()].filter((p) => p.order_id === id),
+      ),
+    paymentRefunds: async () => [],
+  });
+  await Booking.updateOne(
+    { _id: booking._id },
+    {
+      $set: {
+        paymentPlan: {
+          type: "DEPOSIT_BALANCE_V1",
+          mode: "razorpay_test",
+          depositAmount: 9900,
+          estimateAmount: 34900,
+          currency: "INR",
+        },
+        visitCode: "654321",
+      },
+    },
+  );
+  const status = (value, code) =>
+    call("/bookings/" + booking._id + "/status", {
+      as: provider,
+      method: "PATCH",
+      body: { status: value, ...(code ? { code } : {}) },
+    });
+  assert.equal((await status("ON_THE_WAY")).status, 200);
+  assert.equal((await status("IN_PROGRESS", "654321")).status, 409);
+  const captureStage = async (p, eventId) => {
+    const s = {
+      id: "pay_" + p._id,
+      order_id: p.orderId,
+      amount: p.amount,
+      currency: "INR",
+      status: "captured",
+      captured: true,
+      amount_refunded: 0,
+      method: "upi",
+    };
+    savedPayments.set(s.id, s);
+    savedOrders.get(p.orderId).status = "paid";
+    const payload = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: { id: s.id } } },
+    });
+    const results = await Promise.all([
+      call("/payments/" + p._id + "/verify", {
+        body: {
+          razorpay_order_id: p.orderId,
+          razorpay_payment_id: s.id,
+          razorpay_signature: sig(p.orderId, s.id),
+        },
+      }),
+      call("/payments/webhook", {
+        as: null,
+        method: "POST",
+        raw: payload,
+        requestHeader: false,
+        eventId,
+        signature: createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET)
+          .update(payload)
+          .digest("hex"),
+      }),
+    ]);
+    for (const result of results)
+      assert.equal(result.status, 200, JSON.stringify(result.data));
+  };
+  const deposit = await order();
+  assert.equal(deposit.status, 200);
+  await captureStage(deposit.data.payment, "evt_connected_deposit");
+  assert.equal((await status("IN_PROGRESS", "wrong")).status, 400);
+  assert.equal((await status("IN_PROGRESS", "654321")).status, 200);
+  assert.equal((await status("COMPLETED")).status, 200);
+  const submitted = await call("/payments/booking/" + booking._id + "/bill", {
+    as: provider,
+    body: {
+      requestId: "connected-bill-request",
+      items: [
+        {
+          kind: "SERVICE",
+          label: "Fixture service",
+          quantity: 1,
+          unitAmount: 34900,
+        },
+      ],
+    },
+  });
+  assert.equal(submitted.status, 201);
+  assert.equal(
+    (
+      await call("/payments/booking/" + booking._id + "/order", {
+        body: { purpose: "FINAL_BALANCE", acceptBalance: true },
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await call("/payments/booking/" + booking._id + "/bill/decision", {
+        body: { version: 1, decision: "APPROVED", confirm: true },
+      })
+    ).status,
+    200,
+  );
+  const balance = await call("/payments/booking/" + booking._id + "/order", {
+    body: { purpose: "FINAL_BALANCE", acceptBalance: true },
+  });
+  assert.equal(balance.status, 200);
+  assert.equal(balance.data.payment.amount, 25000);
+  assert.notEqual(balance.data.payment.orderId, deposit.data.payment.orderId);
+  await captureStage(balance.data.payment, "evt_connected_balance");
+  const views = await Promise.all(
+    [customer, provider, admin].map((as) =>
+      call("/payments/booking/" + booking._id, { as }),
+    ),
+  );
+  for (const view of views) {
+    assert.equal(view.status, 200);
+    assert.equal(view.data.summary.remaining, 0);
+    assert.equal(view.data.summary.settled, true);
+    assert.equal(view.data.summary.grossCaptured, 34900);
+    assert.equal(view.data.payments.length, 2);
+    assert.equal(view.data.summary.payoutStatus, "NOT_INITIATED");
+  }
+  assert.equal(await Payment.countDocuments(), 2);
+  assert.equal(
+    await PaymentEvent.countDocuments({ processedAt: { $exists: true } }),
+    2,
+  );
 });

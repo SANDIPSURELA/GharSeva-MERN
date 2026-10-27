@@ -1,3 +1,4 @@
+import { ahmedabadProviders } from "./demo-accounts.js";
 // Stable assignments for fictional demo accounts. Never pick by array order.
 export const demoWorkImages = {
   "rajesh-kumar": {
@@ -67,3 +68,17 @@ export const demoWorkImages = {
     source: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b",
   },
 };
+
+// Deterministic service diagrams, clearly labelled as fictional illustrations.
+export const demoIllustrations = Object.fromEntries(
+  ahmedabadProviders.map((p) => [
+    p.id,
+    {
+      src: "/images/demo-illustrations/" + p.id + ".svg",
+      description:
+        p.serviceId + " service diagram for a fictional Ahmedabad profile",
+      kind: "illustration",
+    },
+  ]),
+);
+export const demoImageFor = (id) => demoWorkImages[id] || demoIllustrations[id];

@@ -24,9 +24,18 @@ import {
   loginAliasState,
 } from "../../shared/auth-navigation.js";
 import { checkStoredLoginRole } from "../src/login-policy.js";
-import { externalIdentityFromClaims } from "../src/identity-services.js";
+import {
+  externalIdentityFromClaims,
+  deliverCode,
+} from "../src/identity-services.js";
 
-let tables, routes, delivery, deliveryFails, identities, savedEnvironment;
+let tables,
+  routes,
+  delivery,
+  deliveryFails,
+  identities,
+  savedEnvironment,
+  useRealDelivery;
 const same = (a, b) =>
   a instanceof Date || b instanceof Date
     ? new Date(a).getTime() === new Date(b).getTime()
@@ -208,6 +217,7 @@ beforeEach(() => {
   routes = new Map();
   delivery = [];
   deliveryFails = false;
+  useRealDelivery = false;
   identities = new Map();
   for (const model of [
     AuthSession,
@@ -239,6 +249,7 @@ beforeEach(() => {
     sendLoginCode: async (...args) => {
       delivery.push(args);
       if (deliveryFails) throw new Error("test delivery failure");
+      if (useRealDelivery) return deliverCode(...args);
     },
   });
   mountRegistration(app, {
@@ -822,4 +833,262 @@ test("shared password recovery retains verified public-account eligibility and e
     assert.equal(checked.cookies.has("gharseva_recovery"), false);
     assert.equal(checked.cookies.has("gharseva_session"), false);
   }
+});
+
+function useBrevo() {
+  useRealDelivery = true;
+  Object.assign(process.env, {
+    NODE_ENV: "test",
+    AUTH_DELIVERY_MODE: "live",
+    GHARSEVA_DEMO: "false",
+    EMAIL_TRANSPORT: "brevo",
+    BREVO_API_KEY: "fixture-key-no-real-account",
+    EMAIL_FROM_ADDRESS: "sender@example.test",
+  });
+  for (const key of Object.keys(process.env))
+    if (/^(SMTP_|TWILIO_)/.test(key)) delete process.env[key];
+}
+const bodyCode = (body) => body.textContent.match(/code is (\d{6})/)[1];
+
+test("real Brevo adapter wiring: all stored roles and mobile/password identifiers require email OTP before session", async () => {
+  useBrevo();
+  const outbound = [];
+  mock.method(globalThis, "fetch", async (url, init) => {
+    assert.equal(url, "https://api.brevo.com/v3/smtp/email");
+    outbound.push(JSON.parse(init.body));
+    return Response.json(
+      { messageId: "<accepted@fixture.test>" },
+      { status: 201 },
+    );
+  });
+  for (const storedRole of ["customer", "provider", "admin"]) {
+    const user = await account(storedRole);
+    const pending = await begin(user, {
+      identifier: "+91 " + user.mobile,
+      email: "attacker@example.test",
+    });
+    assert.equal(pending.status, 202);
+    const sent = outbound.at(-1),
+      code = bodyCode(sent);
+    assert.deepEqual(sent.to, [{ email: user.email }]);
+    assert.equal(pending.data.demoCode, undefined);
+    assert.ok(!JSON.stringify(pending.data).includes(code));
+    assert.equal(pending.cookies.has("gharseva_session"), false);
+    const signed = await verify(pending, { code });
+    assert.equal(signed.status, 200);
+    assert.equal(signed.data.role, storedRole);
+    assert.equal((await verify(pending, { code })).status, 401);
+  }
+});
+
+test("registration and recovery use the same selected Brevo delivery and never authenticate from API acceptance", async () => {
+  useBrevo();
+  const outbound = [];
+  mock.method(globalThis, "fetch", async (_url, init) => {
+    outbound.push(JSON.parse(init.body));
+    return Response.json(
+      { messageId: "<accepted@fixture.test>" },
+      { status: 201 },
+    );
+  });
+  const user = await account();
+  tables.get(User)[0].verification = {
+    email: { at: new Date(), mode: "live" },
+  };
+  for (const purpose of ["register", "recover"]) {
+    tables.get(ContactThrottle).length = 0;
+    const sent = await call("post", "/api/auth/code/request", {
+      purpose,
+      channel: "email",
+      contact: user.email,
+    });
+    assert.equal(sent.status, 201);
+    const code = bodyCode(outbound.at(-1));
+    assert.equal(sent.data.demoCode, undefined);
+    assert.ok(!JSON.stringify(sent.data).includes(code));
+    assert.equal(sent.cookies.has("gharseva_session"), false);
+    const result = await call("post", "/api/auth/code/check", {
+      challengeId: String(sent.data.challengeId),
+      code,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.cookies.has("gharseva_session"), false);
+    assert.equal(
+      result.cookies.has(
+        purpose === "register" ? "gharseva_registration" : "gharseva_recovery",
+      ),
+      true,
+    );
+  }
+});
+
+test("provider timeout/rejection in login, registration and recovery leaves no usable proof or authenticated session", async () => {
+  useBrevo();
+  const user = await account();
+  tables.get(User)[0].verification = {
+    email: { at: new Date(), mode: "live" },
+  };
+  const outbound = [];
+  mock.method(globalThis, "fetch", async (_url, init) => {
+    outbound.push(JSON.parse(init.body));
+    throw new DOMException("provider private error", "TimeoutError");
+  });
+  const login = await begin(user);
+  assert.equal(login.status, 503);
+  assert.equal(login.cookies.has("gharseva_session"), false);
+  assert.equal(tables.get(PendingLogin).length, 0);
+  for (const purpose of ["register", "recover"]) {
+    tables.get(ContactThrottle).length = 0;
+    const result = await call("post", "/api/auth/code/request", {
+      purpose,
+      channel: "email",
+      contact: user.email,
+    });
+    assert.equal(result.status, 503);
+    assert.equal(result.cookies.has("gharseva_session"), false);
+    assert.equal(result.data.demoCode, undefined);
+    assert.equal(tables.get(ContactChallenge).length, 0);
+    assert.ok(!JSON.stringify(result.data).includes(bodyCode(outbound.at(-1))));
+    assert.ok(!JSON.stringify(result.data).includes("private"));
+  }
+});
+
+test("an in-flight Brevo message cannot complete registration before acceptance, and cooldown prevents competing codes", async () => {
+  useBrevo();
+  let signalSent, release, sent;
+  const started = new Promise((resolve) => {
+    signalSent = resolve;
+  });
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  mock.method(globalThis, "fetch", async (_url, init) => {
+    sent = JSON.parse(init.body);
+    signalSent();
+    await gate;
+    return Response.json(
+      { messageId: "<accepted@fixture.test>" },
+      { status: 201 },
+    );
+  });
+  const body = {
+    purpose: "register",
+    channel: "email",
+    contact: "new@example.test",
+  };
+  const pending = call("post", "/api/auth/code/request", body);
+  await started;
+  const challenge = tables.get(ContactChallenge).at(-1);
+  const proof = { challengeId: String(challenge._id), code: bodyCode(sent) };
+  assert.equal((await call("post", "/api/auth/code/check", proof)).status, 400);
+  assert.equal(
+    (await call("post", "/api/auth/code/request", body)).status,
+    429,
+  );
+  release();
+  assert.equal((await pending).status, 201);
+  const results = await Promise.all([
+    call("post", "/api/auth/code/check", proof),
+    call("post", "/api/auth/code/check", proof),
+  ]);
+  assert.equal(results.filter((r) => r.status === 200).length, 1);
+});
+
+test("uncertain Brevo resend invalidates both old and unaccepted new proof, without retries or live code disclosure", async () => {
+  useBrevo();
+  const outbound = [];
+  let failDelivery = false;
+  mock.method(globalThis, "fetch", async (_url, init) => {
+    outbound.push(JSON.parse(init.body));
+    if (failDelivery) throw new DOMException("timeout", "TimeoutError");
+    return Response.json(
+      { messageId: "<accepted@fixture.test>" },
+      { status: 201 },
+    );
+  });
+  const pending = await begin(await account()),
+    old = bodyCode(outbound[0]);
+  allowResend();
+  failDelivery = true;
+  const r = await call("post", "/api/auth/login/resend", {}, pending.cookies);
+  assert.equal(r.status, 503);
+  const fresh = bodyCode(outbound[1]);
+  assert.notEqual(old, fresh);
+  for (const code of [old, fresh])
+    assert.equal((await verify(pending, { code })).status, 400);
+  assert.equal(
+    (await call("post", "/api/auth/login/resend", {}, pending.cookies)).status,
+    429,
+  );
+  assert.equal(outbound.length, 2);
+});
+
+test("live Brevo contact codes preserve expiry, five-attempt limit and replacement invalidation", async () => {
+  useBrevo();
+  let sent;
+  mock.method(globalThis, "fetch", async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return Response.json(
+      { messageId: "<accepted@fixture.test>" },
+      { status: 201 },
+    );
+  });
+  for (const scenario of ["expired", "attempts", "replacement"]) {
+    const body = {
+      purpose: "register",
+      channel: "email",
+      contact: scenario + "@example.test",
+    };
+    const result = await call("post", "/api/auth/code/request", body);
+    const proof = {
+      challengeId: String(result.data.challengeId),
+      code: bodyCode(sent),
+    };
+    const row = tables.get(ContactChallenge).at(-1);
+    if (scenario === "expired") row.expiresAt = new Date(0);
+    if (scenario === "attempts") {
+      for (let i = 0; i < 5; i++)
+        assert.equal(
+          (
+            await call("post", "/api/auth/code/check", {
+              ...proof,
+              code: "000000",
+            })
+          ).status,
+          400,
+        );
+    }
+    if (scenario === "replacement") {
+      for (const r of tables.get(ContactThrottle))
+        r.nextAllowedAt = new Date(0);
+      assert.equal(
+        (await call("post", "/api/auth/code/request", body)).status,
+        201,
+      );
+    }
+    assert.equal(
+      (await call("post", "/api/auth/code/check", proof)).status,
+      400,
+    );
+  }
+});
+
+test("late provider acceptance cannot revive a contact challenge that expired during delivery", async () => {
+  useBrevo();
+  mock.method(globalThis, "fetch", async () => {
+    tables.get(ContactChallenge).at(-1).expiresAt = new Date(0);
+    return Response.json(
+      { messageId: "<accepted@fixture.test>" },
+      { status: 201 },
+    );
+  });
+  const result = await call("post", "/api/auth/code/request", {
+    purpose: "register",
+    channel: "email",
+    contact: "new@example.test",
+  });
+  assert.equal(result.status, 409);
+  assert.equal(result.data.challengeId, undefined);
+  assert.equal(result.cookies.has("gharseva_session"), false);
+  assert.equal(tables.get(ContactChallenge).length, 0);
 });

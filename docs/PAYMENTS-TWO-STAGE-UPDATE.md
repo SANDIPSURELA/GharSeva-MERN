@@ -1,10 +1,12 @@
 # Two-stage payments: setup and review
 
+Current verification and setup: [RAZORPAY-TWO-STAGE-VERIFICATION.md](../RAZORPAY-TWO-STAGE-VERIFICATION.md). Earlier validation counts below are historical.
+
 This update preserves existing accounts and bookings. It does not enable live-money collection or provider payouts. Older bookings without a payment plan retain their optional-deposit behaviour and receipts; no new debt or start requirement is imposed on them.
 
 ## New-booking journey
 
-New bookings created in `demo` or `razorpay_test` snapshot `DEPOSIT_BALANCE_V1`, mode, estimate and deposit in integer paise. The default INR 99 deposit is configurable with `PAYMENT_DEPOSIT_RUPEES` (integer rupees 1-500), capped at the starting estimate. Configuration changes do not change a saved plan. Bookings created with payments disabled retain the original workflow.
+New bookings snapshot `DEPOSIT_BALANCE_V1`, mode, estimate and deposit in integer paise. The default INR 99 deposit is configurable with `PAYMENT_DEPOSIT_RUPEES` (integer rupees 1-500), capped at the starting estimate. Configuration changes do not change a saved plan. New bookings with payments disabled still snapshot a required Razorpay TEST plan and cannot start unpaid. Only older bookings already saved without a plan retain the original workflow.
 
 1. Professional accepts. Customer opens **Bills & payments** or the booking's **Bill, payments & receipts** action.
 2. Customer pays deposit. A server-verified capture is required before the existing visit-OTP start transition. Payment does not replace acceptance or the OTP. Authorisation alone is insufficient.
@@ -64,7 +66,7 @@ RAZORPAY_WEBHOOK_SECRET=<your-test-webhook-secret>
 
 Live `rzp_live_` keys are refused. Missing keys/webhook secret show setup instructions instead of a working Pay button. Gateway failures never silently use simulation. Keep the original payment mode configured for reconciliation of its existing bookings.
 
-Password login still requires registered-email OTP. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` and use an account whose inbox its owner can access. SMTP needs outbound connectivity; Render Free blocks ports 25/465/587. Existing Firebase/Apple settings and eligibility are unchanged. See the existing login setup documentation.
+Password login still requires registered-email OTP to an operator-controlled account. On Render Free, use the Brevo HTTPS setup in [EMAIL-OTP-RENDER.md](EMAIL-OTP-RENDER.md); SMTP remains available on other suitable hosts. Actual inbox delivery is unverified. Existing Firebase/Apple settings and eligibility are unchanged.
 
 Run the migration preview/apply above for an existing payment collection, then start ordinary development:
 

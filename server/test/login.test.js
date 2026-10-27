@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import { seed } from "../src/seed.js";
 import {
@@ -120,17 +120,8 @@ before(async () => {
   process.env.SEED_CUSTOMER_PASSWORD = "Customer123";
   process.env.SEED_PROVIDER_PASSWORD = "Provider123";
   process.env.SEED_ADMIN_PASSWORD = "Admin12345";
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri());
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
   await Promise.all([
     User.init(),
     Booking.init(),
@@ -165,7 +156,7 @@ afterEach(async () => {
 });
 after(async () => {
   await mongoose.disconnect();
-  await db.stop();
+  await db?.stop();
 });
 
 test("email recovery only resets the password, revokes sessions, requires confirmation and is single use", async () => {

@@ -20,7 +20,10 @@
     "deploy:bootstrap": "node scripts/bootstrap-production.js",
     "format": "prettier --write \"client/src/**/*.{js,jsx,css}\" \"server/**/*.{js,json}\" \"scripts/*.js\" \"*.json\" \"*.md\"",
     "demo:expand": "node scripts/expand-demo.js",
-    "integrations:check": "node scripts/check-integrations.js"
+    "integrations:check": "node scripts/check-integrations.js",
+    "catalog:reconcile": "node scripts/reconcile-catalog.js",
+    "test:catalog": "node --test server/test/catalog-reconciliation-unit.test.js server/test/city-demo.test.js server/test/work-images.test.js server/test/payment-stages-unit.test.js",
+    "test:db": "node scripts/check-test-database.js"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

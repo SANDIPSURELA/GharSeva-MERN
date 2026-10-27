@@ -304,8 +304,7 @@ export function PasswordRecovery() {
                 <p className="gs-recovery__notice">
                   If you never verified a contact, cannot receive a code or need
                   help with an administrator account,{" "}
-                  <Link to="/contact">contact support</Link>. You can also
-                  return to Google or Apple sign-in if you previously linked it.
+                  <Link to="/contact">contact support</Link>.
                 </p>
               </>
             )}

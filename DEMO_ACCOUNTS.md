@@ -1,3 +1,5 @@
+> Classroom launcher update: npm.cmd run demo now generates credentials in the ignored .test-tmp/demo-accounts.local.md and uses reserved example.test addresses for newly created isolated fixtures. The fixed passwords and older expansion commands below are historical. See CATALOG-AHMEDABAD-REPAIR.md. Existing saved accounts are not rewritten.
+
 # GharSeva classroom demo accounts
 
 This is the fictional account catalogue used by the seed, expansion and terminal list. It is not a report of accounts currently present in your persistent database. Temporary classroom passwords below apply to a fresh `npm.cmd run demo` session. Login accepts email OR mobile, followed by the password and email OTP for every role, including admin.

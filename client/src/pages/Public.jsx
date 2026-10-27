@@ -336,7 +336,7 @@ const faqs = [
   ],
   [
     "How do payments work?",
-    "Pay-on-site remains available. After provider acceptance, the customer can review an optional visit deposit in the dashboard. Online payments currently support a labelled local simulation or configured Razorpay test mode; live money collection is not enabled. Agree on additional work first.",
+    "New bookings require an online deposit after provider acceptance and before arrival verification and work. Approve extras and the final itemised bill, then pay the approved total less the valid deposit credit online. Razorpay TEST receipts do not represent live money collection or provider payout. Unavailable checkout blocks required payments; historical bookings retain their saved rules.",
   ],
   [
     "Can I change or cancel my booking?",
@@ -789,12 +789,13 @@ export function Policy({ privacy = false }) {
               <p>
                 A booking request requires provider acceptance. Listed prices
                 are starting estimates. Additional work or parts must be agreed
-                separately. Pay-on-site remains available. An optional visit
-                deposit can be demonstrated locally or through configured
-                Razorpay test checkout after acceptance. Test receipts do not
-                represent live collection or a final service invoice. Deposits
-                are credited toward agreed charges; cancellation requires a
-                separate refund review.
+                through customer approval. New bookings require an online
+                deposit after acceptance and before arrival verification and
+                work, then the approved remaining balance online after
+                completion. Historical bookings retain their saved rules.
+                Razorpay TEST receipts do not represent live collection or a
+                final service invoice. Deposits are credited toward agreed
+                charges; cancellation requires a separate refund review.
               </p>
               <h2>Visit code and reviews</h2>
               <p>

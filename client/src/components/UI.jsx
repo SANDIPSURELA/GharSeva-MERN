@@ -265,6 +265,7 @@ export function ProviderCard({ provider, showDetails = false }) {
           <Avatar person={provider} />
           <div>
             <h3>{provider.name}</h3>
+            {provider.demoProviderId && <small>Fictional demo profile</small>}
             <p>
               {provider.categoryNames?.join(" · ") || provider.categoryName}
             </p>
@@ -273,7 +274,11 @@ export function ProviderCard({ provider, showDetails = false }) {
             className="teal"
             size={20}
             role="img"
-            aria-label="Profile reviewed by administrator"
+            aria-label={
+              provider.demoProviderId
+                ? "Approved classroom fixture, not a verified real-world professional"
+                : "Profile reviewed by administrator"
+            }
           />
         </div>
         <div className="provider-rating">

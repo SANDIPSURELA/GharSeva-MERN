@@ -1,3 +1,5 @@
+> **Render Free email update, 27 October 2026:** use [EMAIL-OTP-RENDER.md](EMAIL-OTP-RENDER.md) for Brevo HTTPS delivery. SMTP is still supported on suitable hosts. Password then registered-email OTP remains mandatory for all roles; a mobile identifier does not require SMS.
+
 # Current login setup (25 October 2026)
 
 Password sign-in for all three roles now means: registered email or +91 mobile plus password -> Continue -> registered-email OTP -> Verify & sign in. The shared page is /login for customers, professionals and administrators. /customer/login, /provider/login and /admin/login redirect there. No account-type selector is used. Public Google/Apple sign-in remains direct for linked identities.

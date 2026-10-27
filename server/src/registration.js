@@ -330,7 +330,7 @@ export function mountRegistration(
     if (!options[channel])
       fail(
         503,
-        `${channel === "email" ? "Email" : "SMS"} verification is not available yet. Use the other method or contact support.`,
+        `${channel === "email" ? "Email" : "SMS"} verification is not available yet. Contact support.`,
       );
     let owner;
     if (purpose === "verify") {
@@ -413,6 +413,15 @@ export function mountRegistration(
     try {
       if (challenge.deliveryEligible)
         await deliverCode(channel, contact, value, purpose);
+      const activated = await ContactChallenge.updateOne(
+        { _id: challenge._id, used: false, expiresAt: { $gt: new Date() } },
+        { $set: { ready: true } },
+      );
+      if (!activated.modifiedCount)
+        fail(
+          409,
+          "This code request expired or was replaced. Request a new code.",
+        );
     } catch (error) {
       await ContactChallenge.deleteOne({ _id: challenge._id });
       throw error;
@@ -445,6 +454,7 @@ export function mountRegistration(
       {
         _id: challengeId,
         purpose: { $ne: "login" },
+        ready: true,
         used: false,
         attempts: { $lt: 5 },
         expiresAt: { $gt: new Date() },
@@ -480,8 +490,13 @@ export function mountRegistration(
         fail(403, "This verification belongs to a different account.");
     }
     const consumed = await ContactChallenge.updateOne(
-      { _id: challenge._id, used: false },
-      { $set: { used: true } },
+      {
+        _id: challenge._id,
+        used: false,
+        ready: true,
+        expiresAt: { $gt: new Date() },
+      },
+      { $set: { used: true, ready: false } },
     );
     if (!consumed.modifiedCount)
       fail(409, "This code was already used. Request a new one.");

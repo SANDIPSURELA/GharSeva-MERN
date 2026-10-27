@@ -415,10 +415,24 @@ export function createApp({
   app.get("/api/cities", (req, res) => res.json(supportedCities));
   app.get("/api/providers", optionalAuth, async (req, res) => {
     const city = req.query.city || req.user?.city;
+    let serviceFilter = {};
+    if (req.query.category !== undefined) {
+      const slug = text(req.query.category, "Category", 1, 70);
+      if (!(await Category.exists({ slug, enabled: true })))
+        return res.json([]);
+      serviceFilter = {
+        $and: [
+          {
+            $or: [{ "profile.category": slug }, { "profile.categories": slug }],
+          },
+        ],
+      };
+    }
     res.json(
       city
         ? await publicProviders({
             ...cityFilter(city),
+            ...serviceFilter,
             "profile.available": true,
           })
         : [],

@@ -18,6 +18,7 @@ import {
   financialState,
   currentBill,
   paymentSummary,
+  paymentRecordIssue,
   paise,
   rupeesToPaise,
 } from "./billing-domain.js";
@@ -293,7 +294,8 @@ export async function reconcilePayment(
   }
   if (callback) {
     validateSnapshot(callback, p);
-    byId.set(callback.id, callback);
+    const listed = byId.get(callback.id);
+    if (!listed?.captured || callback.captured) byId.set(callback.id, callback);
   }
   if (p.paymentId && !byId.has(p.paymentId)) {
     const known = await gateway.fetchPayment(p.paymentId);
@@ -310,7 +312,10 @@ export async function reconcilePayment(
       ...captured.map((s) => s.id),
     ]),
   ];
-  let issue = "",
+  const b = await Booking.findById(p.booking);
+  let issue = b
+      ? paymentRecordIssue(b.toObject ? b.toObject() : b, p)
+      : "Payment booking is missing. Administrator reconciliation is required.",
     refundPending = false;
   if (captured.length && order.status !== "paid")
     issue =
@@ -321,7 +326,6 @@ export async function reconcilePayment(
   if (captureIds.length > 1)
     issue =
       "Multiple captures detected for one order. Collection is blocked for refund review.";
-  const b = await Booking.findById(p.booking);
   for (const s of captured) {
     const refunds = await gateway.paymentRefunds(s.id);
     if (!Array.isArray(refunds)) fail(503, "Unreadable refund history.");
@@ -470,6 +474,37 @@ export async function requireDepositBeforeStart(
       "Deposit capture/refund reconciliation must finish before starting work. The visit OTP is still required.",
     );
 }
+async function paymentForGatewayOrder(orderId, gateway) {
+  let p = await Payment.findOne({ orderId, mode: "razorpay_test" });
+  if (p) return p;
+  // A signed event may arrive after gateway creation but before local order binding.
+  // Recover only through an authoritative order and our stable unique receipt.
+  const order = await gateway.fetchOrder(orderId);
+  if (!order || order.id !== orderId || typeof order.receipt !== "string")
+    fail(409, "Unrecognized gateway order requires reconciliation.");
+  p = await Payment.findOne({ receipt: order.receipt, mode: "razorpay_test" });
+  if (!p) return null;
+  verifyOrder(order, p);
+  const bound =
+    (await Payment.findOneAndUpdate(
+      { _id: p._id, orderId: { $exists: false } },
+      {
+        $set: { orderId, status: "READY", lastError: "" },
+        $inc: { revision: 1 },
+        $push: {
+          history: {
+            action: "ORDER_RECOVERED",
+            source: "WEBHOOK",
+            note: "Bound authoritative order through its saved receipt.",
+          },
+        },
+      },
+      { returnDocument: "after" },
+    )) || (await Payment.findById(p._id));
+  verifyOrder(order, bound);
+  return bound;
+}
+
 export function mountPaymentWebhook(app, { gateway = razorpayGateway() } = {}) {
   const limit = rateLimit({
     windowMs: 60000,
@@ -492,6 +527,8 @@ export function mountPaymentWebhook(app, { gateway = razorpayGateway() } = {}) {
       } catch {
         fail(400, "Invalid webhook JSON.");
       }
+      if (!event || typeof event !== "object" || Array.isArray(event))
+        fail(400, "Invalid webhook event.");
       if (
         ![
           "payment.captured",
@@ -506,8 +543,9 @@ export function mountPaymentWebhook(app, { gateway = razorpayGateway() } = {}) {
         return res.json({ ok: true, ignored: true });
       const bodyHash = createHash("sha256").update(req.body).digest("hex"),
         header = req.get("X-Razorpay-Event-Id"),
-        eventKey =
-          "razorpay_test:" + (header ? String(header).slice(0, 120) : bodyHash);
+        eventKey = "razorpay_test:" + (header ? String(header) : bodyHash);
+      if (header && !/^[a-zA-Z0-9_-]{1,120}$/.test(header))
+        fail(400, "Invalid webhook event reference.");
       let log;
       try {
         log = await PaymentEvent.create({
@@ -522,7 +560,8 @@ export function mountPaymentWebhook(app, { gateway = razorpayGateway() } = {}) {
           fail(409, "Webhook ID reused with a different payload.");
         if (log.processedAt) return res.json({ ok: true, duplicate: true });
       }
-      let p;
+      let p,
+        gatewayOrderId = event.payload?.order?.entity?.id;
       const paymentId =
         event.payload?.payment?.entity?.id ||
         event.payload?.refund?.entity?.payment_id;
@@ -530,24 +569,63 @@ export function mountPaymentWebhook(app, { gateway = razorpayGateway() } = {}) {
         const orderId = event.payload?.order?.entity?.id;
         if (!/^order_[a-zA-Z0-9]{5,80}$/.test(orderId || ""))
           fail(400, "Missing gateway order reference.");
-        p = await Payment.findOne({ orderId, mode: "razorpay_test" });
+        await PaymentEvent.updateOne(
+          { _id: log._id },
+          { $set: { gatewayOrderId: orderId } },
+        );
+        p = await paymentForGatewayOrder(orderId, gateway);
       } else {
         if (!/^pay_[a-zA-Z0-9]{5,80}$/.test(paymentId || ""))
           fail(400, "Missing gateway payment reference.");
+        await PaymentEvent.updateOne(
+          { _id: log._id },
+          { $set: { gatewayPaymentId: paymentId } },
+        );
         const s = await gateway.fetchPayment(paymentId);
-        p = await Payment.findOne({
-          orderId: s.order_id,
-          mode: "razorpay_test",
-        });
+        if (!/^order_[a-zA-Z0-9]{5,80}$/.test(s?.order_id || ""))
+          fail(409, "Gateway payment has no valid order association.");
+        gatewayOrderId = s.order_id;
+        await PaymentEvent.updateOne(
+          { _id: log._id },
+          { $set: { gatewayOrderId } },
+        );
+        p = await paymentForGatewayOrder(s.order_id, gateway);
         if (p) validateSnapshot(s, p);
       }
+      await PaymentEvent.updateOne(
+        { _id: log._id },
+        {
+          $set: {
+            gatewayPaymentId: paymentId,
+            gatewayOrderId: p?.orderId || gatewayOrderId,
+            resolution: p ? "PENDING" : "UNMATCHED",
+          },
+        },
+      );
+      if (!p)
+        return res.status(202).json({ ok: true, reconciliationRequired: true });
       if (p) {
-        await reconcilePayment(p, gateway, "WEBHOOK");
+        const saved = await reconcilePayment(p, gateway, "WEBHOOK");
+        if (saved.reconciliationIssue) {
+          await PaymentEvent.updateOne(
+            { _id: log._id },
+            { $set: { payment: p._id, resolution: "RECONCILIATION_REQUIRED" } },
+          );
+          return res
+            .status(202)
+            .json({ ok: true, reconciliationRequired: true });
+        }
         await markSettlement(await Booking.findById(p.booking));
       }
       await PaymentEvent.updateOne(
         { _id: log._id },
-        { $set: { payment: p?._id, processedAt: new Date() } },
+        {
+          $set: {
+            payment: p._id,
+            resolution: "PROCESSED",
+            processedAt: new Date(),
+          },
+        },
       );
       res.json({ ok: true, ...(!p ? { ignored: true } : {}) });
     },
@@ -592,6 +670,14 @@ export function mountPayments(app, { gateway = razorpayGateway() } = {}) {
       pages: Math.max(1, Math.ceil(total / 20)),
       total,
     });
+  });
+  app.get("/api/payments/events", auth, role("admin"), async (_req, res) => {
+    res.json(
+      await PaymentEvent.find({ processedAt: { $exists: false } })
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .lean(),
+    );
   });
   app.get("/api/payments/options", (req, res) => res.json(paymentOptions()));
   app.get("/api/payments/booking/:id", auth, async (req, res) =>
@@ -810,21 +896,24 @@ export function mountPayments(app, { gateway = razorpayGateway() } = {}) {
           try {
             const order = await gateway.createOrder(p);
             verifyOrder(order, p);
-            p = await Payment.findByIdAndUpdate(
-              p._id,
-              {
-                $set: { orderId: order.id, status: "READY", lastError: "" },
-                $inc: { revision: 1 },
-                $push: {
-                  history: {
-                    action: "READY",
-                    source: "GATEWAY",
-                    note: "Razorpay test order created.",
+            p =
+              (await Payment.findOneAndUpdate(
+                { _id: p._id, orderId: { $exists: false }, status: "CREATING" },
+                {
+                  $set: { orderId: order.id, status: "READY", lastError: "" },
+                  $inc: { revision: 1 },
+                  $push: {
+                    history: {
+                      action: "READY",
+                      source: "GATEWAY",
+                      note: "Razorpay test order created.",
+                    },
                   },
                 },
-              },
-              { returnDocument: "after" },
-            );
+                { returnDocument: "after" },
+              )) || (await Payment.findById(p._id));
+            if (p.orderId !== order.id)
+              fail(409, "Conflicting gateway order requires reconciliation.");
           } catch (e) {
             await Payment.updateOne(
               { _id: p._id },

@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import sharp from "sharp";
 import jwt from "jsonwebtoken";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import {
   User,
@@ -95,17 +95,8 @@ before(async () => {
   process.env.NODE_ENV = "test";
   process.env.JWT_SECRET = randomBytes(48).toString("hex");
   delete process.env.IDENTITY_STORAGE_KEY;
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        "--nounixsocket",
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri());
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
   await Promise.all([
     User.init(),
     File.init(),
@@ -114,9 +105,9 @@ before(async () => {
   ]);
 });
 after(async () => {
-  await new Promise((resolve) => server.close(resolve));
+  if (server) await new Promise((resolve) => server.close(resolve));
   await mongoose.disconnect();
-  await db.stop();
+  await db?.stop();
 });
 beforeEach(async () => {
   if (server) await new Promise((resolve) => server.close(resolve));

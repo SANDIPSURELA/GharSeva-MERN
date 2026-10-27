@@ -21,12 +21,24 @@ export function rupeesToPaise(value) {
   );
 }
 export function paymentPlanSnapshot(price, options = paymentOptions()) {
-  if (!["demo", "razorpay_test"].includes(options.mode)) return undefined;
+  if (options.depositValid === false)
+    fail(
+      503,
+      "Deposit configuration requires review before booking. No payment policy was changed.",
+    );
+  const depositRupees = options.depositRupees ?? paymentOptions().depositRupees;
+  if (
+    !Number.isInteger(depositRupees) ||
+    depositRupees < 1 ||
+    depositRupees > 500
+  )
+    fail(503, "Deposit configuration requires review before booking.");
   const estimateAmount = rupeesToPaise(price);
   return {
     type: NEW_PLAN,
-    mode: options.mode,
-    depositAmount: Math.min(options.depositRupees * 100, estimateAmount),
+    // Missing gateway configuration cannot turn a new booking into a historical optional plan.
+    mode: options.mode === "demo" ? "demo" : "razorpay_test",
+    depositAmount: Math.min(depositRupees * 100, estimateAmount),
     estimateAmount,
     currency: "INR",
   };
@@ -94,13 +106,59 @@ export function calculateBill(items, b) {
     ),
   };
 }
+const reference = (value) => String(value?._id ?? value ?? "");
+export function paymentRecordIssue(b, p) {
+  if (b.paymentPlan?.type !== NEW_PLAN) return "";
+  const plan = b.paymentPlan,
+    f = financialState(b),
+    bill = currentBill(b);
+  if (
+    !p ||
+    p.mode !== plan.mode ||
+    p.currency !== "INR" ||
+    !Number.isSafeInteger(p.amount) ||
+    p.amount <= 0
+  )
+    return "Payment mode, currency or amount differs from the booking plan. Reconciliation required.";
+  if (
+    (b._id && reference(p.booking) !== reference(b._id)) ||
+    (b.customer && reference(p.customer) !== reference(b.customer)) ||
+    (b.provider && reference(p.provider) !== reference(b.provider))
+  )
+    return "Payment ownership or booking association mismatch. Reconciliation required.";
+  if ((p.purpose || "VISIT_DEPOSIT") === "VISIT_DEPOSIT")
+    return p.amount === plan.depositAmount
+      ? ""
+      : "Deposit amount differs from the saved plan. Reconciliation required.";
+  if (
+    p.purpose !== "FINAL_BALANCE" ||
+    reference(f.balancePayment) !== reference(p._id) ||
+    !bill ||
+    bill.status !== "APPROVED" ||
+    bill.version !== p.billVersion ||
+    f.frozenVersion !== p.billVersion ||
+    f.frozenAmount !== p.amount ||
+    f.frozenCredit !== p.creditSnapshot ||
+    !Number.isSafeInteger(f.frozenCredit) ||
+    f.frozenCredit < 0 ||
+    f.frozenCredit + f.frozenAmount !== bill.total
+  )
+    return "Balance payment is not bound to the current approved bill and frozen credit. Reconciliation required.";
+  return "";
+}
+
 export function paymentSummary(b, payments, refunds = []) {
   const bill = currentBill(b),
     f = financialState(b),
     plan = b.paymentPlan;
-  const eligible = payments.filter(
-    (p) => CAPTURED.includes(p.status) && (!plan || p.mode === plan.mode),
+  const capturedRecords = payments.filter((p) => CAPTURED.includes(p.status));
+  const associationIssues = payments.map((p) => paymentRecordIssue(b, p));
+  const eligible = capturedRecords.filter(
+    (p) => (!plan || p.mode === plan.mode) && !paymentRecordIssue(b, p),
   );
+  const unallocatedCaptured = capturedRecords
+    .filter((p) => paymentRecordIssue(b, p))
+    .reduce((n, p) => n + (p.capturedAmount ?? p.amount), 0);
   const gross = eligible.reduce(
       (n, p) => n + (p.capturedAmount ?? p.amount),
       0,
@@ -114,7 +172,9 @@ export function paymentSummary(b, payments, refunds = []) {
       f.demoRefunds?.some((r) => r.status === "RESERVED"),
     );
   const issue =
-    payments.find((p) => p.reconciliationIssue)?.reconciliationIssue || "";
+    payments.find((p) => p.reconciliationIssue)?.reconciliationIssue ||
+    associationIssues.find(Boolean) ||
+    "";
   const total = bill?.total ?? null;
   // A refund discovered with a delayed capture callback must not create new debt.
   // The immutable balance reservation proves the amount originally authorised.
@@ -153,6 +213,7 @@ export function paymentSummary(b, payments, refunds = []) {
   );
   const depositPaid =
     !!deposit &&
+    !paymentRecordIssue(b, deposit) &&
     CAPTURED.includes(deposit.status) &&
     deposit.mode === plan?.mode &&
     (deposit.capturedAmount ?? deposit.amount) -
@@ -160,6 +221,13 @@ export function paymentSummary(b, payments, refunds = []) {
       plan.depositAmount &&
     !deposit.refundPending &&
     !deposit.reconciliationIssue;
+  if (
+    plan &&
+    !depositPaid &&
+    deposit &&
+    ["CREATING", "AUTHORIZED"].includes(deposit.status)
+  )
+    state = "DEPOSIT_PROCESSING";
   if (plan && depositPaid)
     state = b.status === "COMPLETED" ? "AWAITING_BILL" : "DEPOSIT_PAID";
   if (bill)
@@ -184,6 +252,7 @@ export function paymentSummary(b, payments, refunds = []) {
     state,
     total,
     grossCaptured: gross,
+    unallocatedCaptured,
     processedRefunds: refunded,
     credit: credits,
     depositCredit: eligible

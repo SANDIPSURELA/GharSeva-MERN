@@ -15,6 +15,7 @@ try {
   );
   await mongoose.connect(process.env.MONGODB_URI, {
     autoIndex: false,
+    autoCreate: false,
     serverSelectionTimeoutMS: 10000,
   });
   if (mongoose.connection.name !== options.database)

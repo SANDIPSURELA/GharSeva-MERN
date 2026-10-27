@@ -2,7 +2,10 @@ import { sessionFetch } from "./session-fixture.js";
 import { fixtureLogin } from "./login-fixture.js";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import {
+  createIsolatedMongo,
+  connectIsolatedMongo,
+} from "../../scripts/isolated-mongo.js";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -15,6 +18,7 @@ import {
   Review,
   Enquiry,
   File,
+  Payment,
 } from "../src/models.js";
 import { indiaDate, validateSchedule } from "../src/domain.js";
 let db,
@@ -62,22 +66,15 @@ async function signIn({ body, header = true, origin } = {}) {
   return fixtureLogin(url, body, origin ? { Origin: origin } : {});
 }
 before(async () => {
+  process.env.NODE_ENV = "test";
+  process.env.PAYMENTS_MODE = "demo";
   process.env.AUTH_DELIVERY_MODE = "test";
   process.env.GHARSEVA_DEMO = "true";
   process.env.JWT_SECRET = randomBytes(48).toString("hex");
   process.env.CLIENT_ORIGIN = "http://localhost:5173";
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri());
-  await Booking.init();
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
+  await Promise.all([Booking.init(), Payment.init()]);
   await Category.create({
     slug: "plumbing",
     name: "Plumbing",
@@ -147,7 +144,7 @@ before(async () => {
   }
 });
 after(async () => {
-  await new Promise((resolve) => server?.close(resolve));
+  if (server) await new Promise((resolve) => server.close(resolve));
   await mongoose.disconnect();
   await db?.stop();
 });
@@ -312,6 +309,32 @@ test("arrival transitions to on the way", async () =>
     ).data.status,
     "ON_THE_WAY",
   ));
+test("isolated booking requires its deposit before OTP and uses the explicit classroom payment fixture", async () => {
+  const unpaid = await request("/bookings/" + booking._id + "/status", {
+    method: "PATCH",
+    as: "provider",
+    body: { status: "IN_PROGRESS", code: booking.visitCode },
+  });
+  assert.equal(unpaid.status, 409);
+  const created = await request("/payments/booking/" + booking._id + "/order", {
+    method: "POST",
+    as: "customer",
+    body: { acceptDeposit: true },
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.data.payment.mode, "demo");
+  const captured = await request(
+    "/payments/" + created.data.payment._id + "/demo",
+    {
+      method: "POST",
+      as: "customer",
+      body: { outcome: "CAPTURED" },
+    },
+  );
+  assert.equal(captured.status, 200);
+  assert.equal(captured.data.payment.status, "CAPTURED");
+});
+
 test("wrong OTP does not start work", async () =>
   assert.equal(
     (

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import {
   User,
@@ -61,17 +61,8 @@ before(async () => {
   process.env.NODE_ENV = "test";
   process.env.ASSISTANT_AI_ENABLED = "false";
   process.env.CLIENT_ORIGIN = "http://localhost:5173";
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri());
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
   await Promise.all([
     User.init(),
     Booking.init(),
@@ -161,7 +152,7 @@ afterEach(async () => {
 });
 after(async () => {
   await mongoose.disconnect();
-  await db.stop();
+  await db?.stop();
 });
 
 test("guided problem analysis returns actual category/provider matches without creating a booking", async () => {

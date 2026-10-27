@@ -1,3 +1,5 @@
+> Historical payment notes. Current new-booking policy and setup are in [RAZORPAY-TWO-STAGE-VERIFICATION.md](../RAZORPAY-TWO-STAGE-VERIFICATION.md): required deposit followed by approved remaining balance online. Older optional-deposit records retain their saved rules.
+
 > Current milestone: [Two-stage payments setup and review](PAYMENTS-TWO-STAGE-UPDATE.md). The optional-deposit notes below describe historical bookings. New plan bookings require captured deposit plus visit OTP, followed by customer-approved final-balance payment.
 
 # Optional visit deposits and test-payment ledger — 24 October 2026

@@ -3,7 +3,7 @@ import { fixtureLogin } from "./login-fixture.js";
 import { test, before, after, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { createApp } from "../src/app.js";
@@ -126,17 +126,8 @@ before(async () => {
   process.env.GHARSEVA_DEMO = "true";
   process.env.AUTH_DELIVERY_MODE = "test";
   process.env.CLIENT_ORIGIN = "http://localhost:5173";
-  db = await MongoMemoryServer.create({
-    binary: { version: "7.0.24" },
-    instance: {
-      args: [
-        ...(process.platform === "win32" ? [] : ["--nounixsocket"]),
-        "--setParameter",
-        "diagnosticDataCollectionEnabled=false",
-      ],
-    },
-  });
-  await mongoose.connect(db.getUri());
+  db = await createIsolatedMongo();
+  await connectIsolatedMongo(db);
   await Promise.all([
     User.init(),
     Booking.init(),
@@ -206,7 +197,7 @@ afterEach(async () => {
 });
 after(async () => {
   await mongoose.disconnect();
-  await db.stop();
+  await db?.stop();
 });
 
 test("OTP registration is single-use, HttpOnly, contact-bound and honestly labelled demo", async () => {

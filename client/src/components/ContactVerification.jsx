@@ -8,6 +8,8 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { api } from "../api";
+import { Link } from "react-router-dom";
+import { verificationAvailability } from "../../../shared/verification-options.js";
 import "./Registration.css";
 
 export { externalToken } from "../../../shared/external-auth.js";
@@ -43,7 +45,15 @@ export function ContactVerification({
     let active = true;
     api("/auth/options")
       .then((o) => {
-        if (active) setOptions(o);
+        if (active) {
+          setOptions(o);
+          const { channels } = verificationAvailability(o, {
+            purpose,
+            showSocial,
+            fixedChannel,
+          });
+          if (!fixedChannel && channels.length) setChannel(channels[0]);
+        }
       })
       .catch((e) => {
         if (active) setError(e.message);
@@ -111,6 +121,23 @@ export function ContactVerification({
         )}
       </div>
     );
+  const methods = verificationAvailability(options, {
+    purpose,
+    showSocial,
+    fixedChannel,
+  });
+  if ((options && !methods.available) || (!options && error))
+    return (
+      <div className="gs-verify gs-verify__notice" role="status">
+        <p>
+          Verification is temporarily unavailable. Please contact support for
+          help.
+        </p>
+        <Link className="btn light" to="/contact">
+          Contact support
+        </Link>
+      </div>
+    );
   return (
     <div
       className="gs-verify"
@@ -128,7 +155,7 @@ export function ContactVerification({
           message is sent.
         </p>
       )}
-      {showSocial && purpose !== "verify" && purpose !== "recover" && (
+      {methods.social.length > 0 && (
         <>
           <div className="gs-verify__social">
             {["google", "apple"].map((provider) => (
@@ -180,16 +207,18 @@ export function ContactVerification({
               </button>
             ))}
           </div>
-          <div className="gs-verify__divider">
-            <span>
-              {purpose === "register"
-                ? "or verify your contact"
-                : "or use a one-time code"}
-            </span>
-          </div>
+          {methods.channels.length > 0 && (
+            <div className="gs-verify__divider">
+              <span>
+                {purpose === "register"
+                  ? "or verify your contact"
+                  : "or use a one-time code"}
+              </span>
+            </div>
+          )}
         </>
       )}
-      {!fixedChannel && (
+      {!fixedChannel && methods.channels.length > 0 && (
         <div
           className="gs-verify__tabs"
           role="group"
@@ -203,7 +232,7 @@ export function ContactVerification({
               key={key}
               type="button"
               aria-pressed={channel === key}
-              disabled={busy}
+              disabled={busy || !options?.[key]}
               onClick={() => {
                 setChannel(key);
                 setChallenge(null);
@@ -228,55 +257,52 @@ export function ContactVerification({
         </div>
       )}
       {!options && !error && <p role="status">Loading sign-in options…</p>}
-      {options && !options[channel] && (
-        <p className="gs-verify__notice">
-          {channel === "email" ? "Email" : "SMS"} verification is awaiting
-          setup. Try the other method or contact support.
-        </p>
+
+      {options?.[channel] && (
+        <div className="gs-verify__contact">
+          <label htmlFor={`gs-verify-contact-${purpose}`}>
+            {channel === "email" ? "Email address" : "Indian mobile number"}
+          </label>
+          <input
+            id={`gs-verify-contact-${purpose}`}
+            name={channel === "email" ? "email" : "tel"}
+            type={channel === "email" ? "email" : "tel"}
+            autoComplete={channel === "email" ? "email" : "tel"}
+            value={account ? account[channel] : contact}
+            readOnly={Boolean(account)}
+            onChange={(e) => {
+              setContact(e.target.value);
+              setChallenge(null);
+              setCode("");
+            }}
+            placeholder={
+              channel === "email" ? "you@example.com" : "+91 mobile number"
+            }
+            disabled={busy}
+            maxLength={120}
+          />
+          <button
+            className="btn light"
+            type="button"
+            disabled={
+              busy ||
+              !options?.[channel] ||
+              seconds > 0 ||
+              !(account ? account[channel] : contact).trim()
+            }
+            onClick={send}
+          >
+            {busy
+              ? "Please wait…"
+              : seconds
+                ? `Resend in ${seconds}s`
+                : challenge
+                  ? "Resend code"
+                  : "Send code"}
+            <ArrowRight size={16} aria-hidden="true" />
+          </button>
+        </div>
       )}
-      <div className="gs-verify__contact">
-        <label htmlFor={`gs-verify-contact-${purpose}`}>
-          {channel === "email" ? "Email address" : "Indian mobile number"}
-        </label>
-        <input
-          id={`gs-verify-contact-${purpose}`}
-          name={channel === "email" ? "email" : "tel"}
-          type={channel === "email" ? "email" : "tel"}
-          autoComplete={channel === "email" ? "email" : "tel"}
-          value={account ? account[channel] : contact}
-          readOnly={Boolean(account)}
-          onChange={(e) => {
-            setContact(e.target.value);
-            setChallenge(null);
-            setCode("");
-          }}
-          placeholder={
-            channel === "email" ? "you@example.com" : "+91 mobile number"
-          }
-          disabled={busy}
-          maxLength={120}
-        />
-        <button
-          className="btn light"
-          type="button"
-          disabled={
-            busy ||
-            !options?.[channel] ||
-            seconds > 0 ||
-            !(account ? account[channel] : contact).trim()
-          }
-          onClick={send}
-        >
-          {busy
-            ? "Please wait…"
-            : seconds
-              ? `Resend in ${seconds}s`
-              : challenge
-                ? "Resend code"
-                : "Send code"}
-          <ArrowRight size={16} aria-hidden="true" />
-        </button>
-      </div>
       {challenge && (
         <div className="gs-verify__code">
           {challenge.demoCode && (
