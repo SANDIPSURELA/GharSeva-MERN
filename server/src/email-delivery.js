@@ -115,11 +115,66 @@ export async function verifySmtpConnection() {
   }
 }
 
+const brevoCodes = new Set([
+  "invalid_parameter",
+  "missing_parameter",
+  "unauthorized",
+  "permission_denied",
+  "account_under_validation",
+  "not_enough_credits",
+]);
+async function discardBrevoError(response, signal) {
+  const reader = response.body?.getReader?.();
+  if (!reader) return "unknown";
+  let bytes = 0,
+    chunks = [],
+    abort;
+  try {
+    const deadline = new Promise((_, reject) => {
+      abort = () => reject(new Error("deadline"));
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    });
+    while (true) {
+      const part = await Promise.race([reader.read(), deadline]);
+      if (part.done) break;
+      bytes += part.value.byteLength;
+      if (bytes > 4096) return "unknown";
+      chunks.push(part.value);
+    }
+    const body = Buffer.concat(
+      chunks.map((chunk) => Buffer.from(chunk)),
+    ).toString("utf8");
+    const code = JSON.parse(body)?.code;
+    return typeof code === "string" && brevoCodes.has(code) ? code : "unknown";
+  } catch {
+    return "unknown";
+  } finally {
+    if (abort) signal.removeEventListener("abort", abort);
+    reader.cancel().catch(() => {});
+  }
+}
+function logBrevoFailure(category, status, providerCode = "unknown") {
+  const event = {
+    event: "email_delivery_failed",
+    transport: "brevo",
+    category,
+    provider_code: providerCode,
+  };
+  if (Number.isInteger(status) && status >= 100 && status <= 599)
+    event.http_status = status;
+  console.error(JSON.stringify(event));
+}
 export async function deliverEmailCode(contact, value, purpose) {
   const config = emailReadiness();
-  if (!config.ready)
-    fail(503, "Email delivery is not configured. Contact support.");
-  if (!mailbox(contact) || !/^\d{6}$/.test(value)) unavailable();
+  if (!config.ready) {
+    if (config.transport === "brevo") logBrevoFailure("configuration");
+    unavailable();
+  }
+  if (!mailbox(contact) || !/^\d{6}$/.test(value)) {
+    if (config.transport === "brevo") logBrevoFailure("configuration");
+    unavailable();
+  }
   const subject = "Your GharSeva verification code";
   const description =
     purpose === "recover"
@@ -136,13 +191,17 @@ export async function deliverEmailCode(contact, value, purpose) {
     value +
     ". It expires in 5 minutes. Do not share this code. If you did not request it, ignore this email.";
   if (config.transport === "brevo") {
+    let category = "network",
+      status,
+      providerCode = "unknown";
+    const signal = AbortSignal.timeout(15000);
     try {
       // One attempt only: uncertain acceptance must not trigger an automatic send/retry.
       // Fixed HTTPS origin and no redirects prevent forwarding credentials elsewhere.
       const response = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         redirect: "error",
-        signal: AbortSignal.timeout(15000),
+        signal,
         headers: {
           accept: "application/json",
           "content-type": "application/json",
@@ -158,10 +217,13 @@ export async function deliverEmailCode(contact, value, purpose) {
           textContent: text,
         }),
       });
+      status = response.status;
       if (!response.ok) {
-        await response.body?.cancel();
-        unavailable();
+        category = "provider_rejected";
+        providerCode = await discardBrevoError(response, signal);
+        throw new Error("rejected");
       }
+      category = "invalid_response";
       const result = await response.json();
       if (
         typeof result?.messageId !== "string" ||
@@ -171,7 +233,14 @@ export async function deliverEmailCode(contact, value, purpose) {
       )
         unavailable();
       // Acceptance is not inbox receipt. Neither the response body nor code is logged/returned.
-    } catch {
+    } catch (error) {
+      if (
+        signal.aborted ||
+        error?.name === "TimeoutError" ||
+        error?.name === "AbortError"
+      )
+        category = "timeout";
+      logBrevoFailure(category, status, providerCode);
       unavailable();
     }
     return;

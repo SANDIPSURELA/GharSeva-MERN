@@ -303,3 +303,61 @@ test("strict CLI validates selected email only, fails missing/malformed settings
   const loose = cli({ BREVO_API_KEY: "" }, []);
   assert.equal(loose.status, 0);
 });
+
+test("Brevo diagnostics emit one safe structured event per failed send", async () => {
+  configure();
+  const logs = [];
+  mock.method(console, "error", (value) => logs.push(value));
+  const hostile = "fake-key 123456 owner@example.test";
+  for (const [status, body, expected] of [
+    [
+      401,
+      JSON.stringify({ code: "unauthorized", message: hostile }),
+      "unauthorized",
+    ],
+    [403, JSON.stringify({ code: hostile, message: hostile }), "unknown"],
+    [429, "not json " + hostile, "unknown"],
+    [
+      503,
+      JSON.stringify({ code: "invalid_parameter", padding: "x".repeat(5000) }),
+      "unknown",
+    ],
+  ]) {
+    mock.method(
+      globalThis,
+      "fetch",
+      async () => new Response(body, { status }),
+    );
+    const before = logs.length;
+    await assert.rejects(
+      () => deliverCode("email", "owner@example.test", "123456", "login"),
+      (e) => e.status === 503 && !e.message.includes(hostile),
+    );
+    assert.equal(logs.length, before + 1);
+    const event = JSON.parse(logs.at(-1));
+    assert.deepEqual(event, {
+      event: "email_delivery_failed",
+      transport: "brevo",
+      category: "provider_rejected",
+      provider_code: expected,
+      http_status: status,
+    });
+    for (const secret of ["fake-key", "123456", "owner@example.test"])
+      assert.ok(!logs.at(-1).includes(secret));
+  }
+  for (const [problem, category] of [
+    [new DOMException("private", "TimeoutError"), "timeout"],
+    [Error("private"), "network"],
+  ]) {
+    mock.method(globalThis, "fetch", async () => {
+      throw problem;
+    });
+    const before = logs.length;
+    await assert.rejects(
+      () => deliverCode("email", "owner@example.test", "123456", "login"),
+      { status: 503 },
+    );
+    assert.equal(logs.length, before + 1);
+    assert.equal(JSON.parse(logs.at(-1)).category, category);
+  }
+});
