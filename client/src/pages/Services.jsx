@@ -1,4 +1,5 @@
 import { DiscoveryNotice } from "../components/DiscoveryNotice";
+import { FacultyDemoToggle } from "../components/FacultyDemoToggle";
 import { discoveryState } from "../../../shared/discovery-state.js";
 import { supportedCities, canonicalCity } from "../../../shared/cities.js";
 import { useEffect, useRef, useState } from "react";
@@ -138,6 +139,7 @@ export function Services() {
     refresh,
     selectedCity,
     setSelectedCity,
+    facultyDemo,
   } = useApp();
   const [params, setParams] = useSearchParams();
   const latestParams = useRef(params);
@@ -261,7 +263,9 @@ export function Services() {
             <div className="services-intro-benefits">
               <span>
                 <ShieldCheck size={16} />
-                Reviewed profiles
+                {facultyDemo
+                  ? "Includes fictional demo profiles"
+                  : "Reviewed profiles"}
               </span>
               <span>
                 <Scale size={16} />
@@ -299,6 +303,9 @@ export function Services() {
         </div>
       </section>
 
+      <div className="container">
+        <FacultyDemoToggle />
+      </div>
       <section
         className="services-category-section"
         aria-labelledby="services-category-title"

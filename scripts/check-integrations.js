@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { socialReadiness } from "../server/src/social-readiness.js";
 import { fileURLToPath } from "node:url";
 import {
   identityOptions,
@@ -17,17 +18,25 @@ dotenv.config({
 const args = process.argv.slice(2);
 if (
   args.some(
-    (a) => !["--smtp-connect", "--email-ready", "--payments-ready"].includes(a),
+    (a) =>
+      ![
+        "--smtp-connect",
+        "--email-ready",
+        "--payments-ready",
+        "--google-ready",
+        "--apple-ready",
+      ].includes(a),
   ) ||
   new Set(args).size !== args.length
 )
   throw Error(
-    "Use --email-ready, --payments-ready and/or --smtp-connect, or no arguments. No messages, charges or data changes.",
+    "Use --email-ready, --payments-ready, --google-ready, --apple-ready and/or --smtp-connect, or no arguments. No messages, charges or data changes.",
   );
 const options = identityOptions(),
   payments = paymentOptions(),
   email = emailReadiness(),
-  paymentConfig = paymentReadiness();
+  paymentConfig = paymentReadiness(),
+  social = socialReadiness();
 const configured = (name) =>
   process.env[name] ? "set (not verified)" : "missing";
 console.log(
@@ -38,7 +47,7 @@ console.log(
       storageKey: configured("IDENTITY_STORAGE_KEY"),
       authentication: options.demo
         ? "CLASSROOM - no email delivery"
-        : "ordinary - requires actual email",
+        : "password sign-in needs stored-email OTP; direct social sign-in is independent",
       email: {
         transport: email.transport,
         readiness: email.ready
@@ -46,12 +55,20 @@ console.log(
           : "live configuration incomplete or invalid",
         issues: email.errors,
       },
-      google: options.google
-        ? "configured, sign-in NOT verified"
-        : "disabled or missing Firebase settings",
-      apple: options.apple
-        ? "configured, sign-in NOT verified"
-        : "disabled or missing Firebase/Apple settings",
+      google: {
+        enabled: social.google.enabled,
+        configuration: social.google.configured
+          ? "locally ready; provider setup and real sign-in NOT verified"
+          : "disabled or configuration incomplete",
+        issues: social.errors,
+      },
+      apple: {
+        enabled: social.apple.enabled,
+        configuration: social.apple.configured
+          ? "locally ready; Apple membership/provider/relay setup and real sign-in NOT verified"
+          : "disabled or configuration incomplete",
+        issues: social.errors,
+      },
       payments: {
         mode: payments.mode,
         issues: paymentConfig.errors,
@@ -81,6 +98,18 @@ console.log(
     2,
   ),
 );
+for (const provider of ["google", "apple"]) {
+  if (
+    args.includes("--" + provider + "-ready") &&
+    !social[provider].configured
+  ) {
+    console.error(
+      provider +
+        " readiness failed. Configuration only; no OAuth, message or data change.",
+    );
+    process.exitCode = 1;
+  }
+}
 if (args.includes("--payments-ready") && !paymentConfig.ready) {
   console.error(
     "Payment readiness failed. Configuration only; no gateway request, charge or data change.",

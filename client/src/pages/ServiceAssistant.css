@@ -997,3 +997,32 @@
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* Scoped to the existing assistant. Device/browser verification is separate. */
+.gs-assistant--conversational .gs-assistant__composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: #fff;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+.gs-assistant--conversational .gs-assistant__resume {
+  margin-block: 18px;
+  padding: 20px;
+  background: #f2f9f8;
+  border: 1px solid #d5e7e5;
+  border-radius: 16px;
+}
+.gs-assistant--conversational .gs-assistant__messages {
+  max-height: min(420px, 48dvh);
+}
+@media (max-width: 480px) {
+  .gs-assistant--conversational textarea,
+  .gs-assistant--conversational input,
+  .gs-assistant--conversational select {
+    font-size: 16px;
+  }
+  .gs-assistant--conversational .gs-assistant__resume {
+    padding: 14px;
+  }
+}

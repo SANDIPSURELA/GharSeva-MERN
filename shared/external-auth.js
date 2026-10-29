@@ -1,82 +1,146 @@
-// Firebase credentials remain in memory and are cleared even after cancellation.
-// This integration uses popups; it never silently redirects or links by email.
+// Firebase state is temporary. MongoDB accounts and HttpOnly app sessions remain authoritative.
 export function externalSignInMessage(error) {
   const messages = {
     "auth/popup-blocked":
-      "Your browser blocked sign-in. Allow popups for this site, then select Google or Apple again. You can also use your GharSeva password.",
+      "Your browser blocked sign-in. Allow popups for this site and select the provider again, or use an available password sign-in.",
     "auth/popup-closed-by-user":
-      "Sign-in was cancelled. Select a sign-in method when you are ready.",
+      "Sign-in was cancelled. Select a method when you are ready.",
     "auth/cancelled-popup-request":
-      "Another sign-in window replaced this request. Complete that window or try again.",
+      "Another sign-in window replaced this request. Finish that window or try again.",
     "auth/unauthorized-domain":
-      "This website is not an authorised Firebase sign-in domain. The project owner must finish domain setup.",
+      "This website needs authorised-domain setup for social sign-in. Contact support.",
     "auth/operation-not-allowed":
-      "This sign-in provider is not enabled in Firebase. Contact the project owner.",
+      "This provider needs account setup. Use an available method or contact support.",
     "auth/account-exists-with-different-credential":
-      "An account already uses this email. Complete its existing sign-in, then link the new method in Account settings.",
+      "Use your existing sign-in first. Then explicitly link another method in Account settings.",
     "auth/network-request-failed":
       "The sign-in service could not be reached. Check your connection and try again.",
+    "auth/user-token-expired": "Sign-in expired. Select the provider again.",
+    "auth/invalid-credential":
+      "The provider identity could not be verified. Select the provider again.",
+    "auth/user-disabled": "This sign-in is unavailable. Contact support.",
+    "auth/too-many-requests":
+      "Too many sign-in requests. Wait before trying again.",
   };
   return (
     messages[error?.code] ||
     (error?.code?.startsWith("auth/")
-      ? "External sign-in could not finish. Try again or use your password."
+      ? "Social sign-in could not finish. Try an available method or contact support."
       : error?.message || "Sign-in could not finish.")
   );
 }
 const defaultLoader = async () =>
   Promise.all([import("firebase/app"), import("firebase/auth")]);
-export async function externalToken(
-  options,
-  provider,
-  loadSdk = defaultLoader,
-) {
+let generation = 0,
+  operation = false,
+  activeAuth;
+function enabled(options, provider) {
   if (
     !["google", "apple"].includes(provider) ||
     !options?.[provider] ||
     !options.firebase
   )
     throw Error("This sign-in provider needs configuration.");
+}
+async function setup(options, loadSdk) {
   const [{ initializeApp, getApps }, sdk] = await loadSdk();
   const app =
     getApps().find((a) => a.name === "gharseva-identity") ||
     initializeApp(options.firebase, "gharseva-identity");
+  if (
+    app.options &&
+    ["projectId", "authDomain", "apiKey"].some(
+      (k) => app.options[k] !== options.firebase[k],
+    )
+  )
+    throw Error(
+      "Sign-in settings changed. Reload this page before continuing.",
+    );
   const auth = sdk.getAuth(app);
   await sdk.setPersistence(auth, sdk.inMemoryPersistence);
-  const method =
-    provider === "google"
-      ? new sdk.GoogleAuthProvider()
-      : new sdk.OAuthProvider("apple.com");
-  if (provider === "google")
-    method.setCustomParameters({ prompt: "select_account" });
-  else {
-    method.addScope("email");
-    method.addScope("name");
-  }
-  try {
-    const result = await sdk.signInWithPopup(auth, method);
-    return await result.user.getIdToken(true);
-  } finally {
-    // A cleanup error must not mask cancellation/errors, or leave the UI falsely
-    // reporting success. Firebase persistence above is exclusively in memory.
-    await sdk.signOut(auth).catch(() => {});
-  }
+  activeAuth = { sdk, auth };
+  return activeAuth;
 }
-// Recover a Firebase redirect result only after an explicit user action. The
-// application does not initiate redirect sign-in or persist a token itself.
+export async function prepareExternalAuth(options, loadSdk = defaultLoader) {
+  if ((!options?.google && !options?.apple) || !options.firebase) return;
+  await setup(options, loadSdk);
+}
+export async function clearExternalIdentity() {
+  generation++;
+  const active = activeAuth;
+  if (active) await active.sdk.signOut(active.auth).catch(() => {});
+}
+export async function externalToken(
+  options,
+  provider,
+  loadSdk = defaultLoader,
+) {
+  enabled(options, provider);
+  if (operation) throw Error("A social sign-in is already in progress.");
+  operation = true;
+  const started = generation;
+  let connection, token;
+  try {
+    connection = await setup(options, loadSdk);
+    if (started !== generation)
+      throw Error("Sign-in was cancelled because the session changed.");
+    const { sdk, auth } = connection;
+    const method =
+      provider === "google"
+        ? new sdk.GoogleAuthProvider()
+        : new sdk.OAuthProvider("apple.com");
+    if (provider === "google")
+      method.setCustomParameters({ prompt: "select_account" });
+    else {
+      method.addScope("email");
+      method.addScope("name");
+    }
+    const result = await sdk.signInWithPopup(auth, method);
+    token = await result.user.getIdToken(true);
+    if (started !== generation)
+      throw Error("Sign-in was cancelled because the session changed.");
+  } finally {
+    if (connection)
+      await connection.sdk.signOut(connection.auth).catch(() => {});
+    operation = false;
+  }
+  if (started !== generation)
+    throw Error("Sign-in was cancelled because the session changed.");
+  return token;
+}
+// Compatibility utility only: UI does not initiate redirects or offer an orphan recovery action.
 export async function recoverExternalToken(options, loadSdk = defaultLoader) {
   if ((!options?.google && !options?.apple) || !options.firebase)
     throw Error("External sign-in needs configuration.");
-  const [{ initializeApp, getApps }, sdk] = await loadSdk();
-  const app =
-    getApps().find((a) => a.name === "gharseva-identity") ||
-    initializeApp(options.firebase, "gharseva-identity");
-  const auth = sdk.getAuth(app);
-  await sdk.setPersistence(auth, sdk.inMemoryPersistence);
+  if (operation) throw Error("A social sign-in is already in progress.");
+  operation = true;
+  const started = generation;
+  let connection;
   try {
-    const result = await sdk.getRedirectResult(auth);
-    return result ? await result.user.getIdToken(true) : null;
+    connection = await setup(options, loadSdk);
+    const result = await connection.sdk.getRedirectResult(connection.auth);
+    const token = result ? await result.user.getIdToken(true) : null;
+    if (started !== generation)
+      throw Error("Sign-in was cancelled because the session changed.");
+    return token;
   } finally {
-    await sdk.signOut(auth).catch(() => {});
+    if (connection)
+      await connection.sdk.signOut(connection.auth).catch(() => {});
+    operation = false;
   }
+}
+export async function exchangeExternalIdentity({
+  options,
+  provider,
+  request,
+  details = {},
+  active = () => true,
+  token = externalToken,
+}) {
+  const idToken = await token(options, provider);
+  if (!active()) throw Error("The session changed. Sign in again.");
+  return request("/auth/external", {
+    method: "POST",
+    body: { ...details, idToken, provider },
+  });
 }

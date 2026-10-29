@@ -14,10 +14,10 @@ import "./Registration.css";
 
 export { externalToken } from "../../../shared/external-auth.js";
 import {
-  externalToken,
-  recoverExternalToken,
+  prepareExternalAuth,
   externalSignInMessage,
 } from "../../../shared/external-auth.js";
+import { signInExternal } from "../external-identity";
 
 export function ContactVerification({
   purpose = "register",
@@ -70,6 +70,10 @@ export function ContactVerification({
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
+  useEffect(() => {
+    if (options?.google || options?.apple)
+      prepareExternalAuth(options).catch(() => {});
+  }, [options]);
   const act = async (fn) => {
     if (lock.current) return;
     lock.current = true;
@@ -170,14 +174,9 @@ export function ContactVerification({
                 }
                 onClick={() =>
                   act(async () => {
-                    const idToken = await externalToken(options, provider);
-                    const result = await api("/auth/external", {
-                      method: "POST",
-                      body: {
-                        idToken,
-                        action: purpose,
-                        ...(portal ? { portal } : {}),
-                      },
+                    const result = await signInExternal(options, provider, {
+                      action: purpose,
+                      ...(portal ? { portal } : {}),
                     });
                     onVerified(
                       result.recovery || result.identity || result.user,
@@ -378,9 +377,11 @@ export function SocialSignIn({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const lock = useRef(false),
-    errorRef = useRef(null);
+    errorRef = useRef(null),
+    mounted = useRef(true);
   useEffect(() => {
     let active = true;
+    mounted.current = true;
     api("/auth/options")
       .then((o) => {
         if (active) setOptions(o);
@@ -388,45 +389,45 @@ export function SocialSignIn({
       .catch((e) => {
         if (active) setError(e.message);
       });
-    const authenticate = async (provider, recover = false) => {
-      if (lock.current) return;
-      lock.current = true;
-      setBusy(true);
-      onBusyChange?.(true);
-      setError("");
-      try {
-        const idToken = recover
-          ? await recoverExternalToken(options)
-          : await externalToken(options, provider);
-        if (!idToken) {
-          setError(
-            "No interrupted sign-in was found. Select Google or Apple to start again.",
-          );
-          return;
-        }
-        const result = await api("/auth/external", {
-          method: "POST",
-          body: { idToken, action: "login" },
-        });
-        if (result.onboarding) onOnboarding?.(result.identity);
-        else onVerified(result.user);
-      } catch (e) {
-        setError(externalSignInMessage(e));
-      } finally {
-        lock.current = false;
-        setBusy(false);
-        onBusyChange?.(false);
-      }
-    };
     return () => {
       active = false;
+      mounted.current = false;
     };
   }, []);
+  useEffect(() => {
+    if (options?.google || options?.apple)
+      prepareExternalAuth(options).catch(() => {});
+  }, [options]);
+  const authenticate = async (provider) => {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    onBusyChange?.(true);
+    setError("");
+    try {
+      const result = await signInExternal(options, provider, {
+        action: "login",
+      });
+      if (!mounted.current) return;
+      if (result.onboarding) onOnboarding?.(result.identity);
+      else onVerified(result.user);
+    } catch (e) {
+      setError(externalSignInMessage(e));
+    } finally {
+      lock.current = false;
+      setBusy(false);
+      onBusyChange?.(false);
+    }
+  };
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
   return (
-    <div className="gs-login-social" aria-label="External sign-in methods">
+    <div
+      className="gs-login-social"
+      aria-label="External sign-in methods"
+      aria-busy={busy}
+    >
       <div className="gs-verify__social">
         {["google", "apple"].map((provider) => (
           <button
@@ -463,16 +464,6 @@ export function SocialSignIn({
           </button>
         ))}
       </div>
-      {(options?.google || options?.apple) && (
-        <button
-          type="button"
-          className="btn light small"
-          disabled={busy || disabled}
-          onClick={() => authenticate(null, true)}
-        >
-          Recover interrupted external sign-in
-        </button>
-      )}
       {!options && !error && (
         <p className="gs-register__hint" role="status">
           Checking available sign-in methods…

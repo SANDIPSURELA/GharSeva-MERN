@@ -1,5 +1,7 @@
 # Catalog and Ahmedabad demo repair — 27 October 2026
 
+Update 28 October 2026: New classroom expansion fixtures no longer create the fictional supporting PDFs described in the historical section below, and new profiles use zero years of experience. Existing records are not changed. See CORE-FUNCTIONALITY-HANDOFF.md for the latest validation and remaining blockers.
+
 Working folder: C:\workspace\GharSeva-MERN. Current files and the uncommitted Brevo milestone were retained. No ZIP, replacement project, dependency upgrade, push, deployment or Render setting change was made. The existing production startup command is unchanged.
 
 ## What was diagnosed

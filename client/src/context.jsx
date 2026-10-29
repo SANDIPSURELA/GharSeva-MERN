@@ -1,3 +1,4 @@
+import { clearDraftReference } from "../../shared/assistant-client-state.js";
 import { canonicalCity } from "../../shared/cities.js";
 import {
   createContext,
@@ -12,6 +13,7 @@ import {
   openSessionChannel,
   bindSessionLifecycle,
 } from "../../shared/session-client.js";
+import { clearExternalIdentity } from "../../shared/external-auth.js";
 import { SessionControls } from "./components/SessionControls";
 const Context = createContext();
 export function AppProvider({ children }) {
@@ -38,6 +40,16 @@ export function AppProvider({ children }) {
     }
   });
   const [selectedCity, rawSetCity] = useState("");
+  const [facultyDemo, rawSetFacultyDemo] = useState(false);
+  const facultyRef = useRef(false);
+  const setFacultyDemo = useCallback((value) => {
+    facultyRef.current = value === true;
+    cityRequest.current++;
+    setProviders([]);
+    setComparison([]);
+    setDiscoveryLoading(true);
+    rawSetFacultyDemo(value === true);
+  }, []);
   const cityRef = useRef(""),
     cityRequest = useRef(0),
     defaultRef = useRef("");
@@ -51,9 +63,8 @@ export function AppProvider({ children }) {
     setDiscoveryError("");
     setComparison([]);
     rawSetCity(city);
-    try {
-      sessionStorage.removeItem("gs_assistant_public_selection");
-    } catch {}
+    // Guest continuation is a minimal expiring public selection. The assistant
+    // revalidates it against the signed-in customer city after authentication.
   }, []);
   useEffect(() => {
     const key = user ? user._id + ":" + (user.city || "") : "";
@@ -75,7 +86,9 @@ export function AppProvider({ children }) {
     setDiscoveryError("");
     try {
       const [p, c, g] = await Promise.all([
-        api(`/providers${city ? "?city=" + encodeURIComponent(city) : ""}`),
+        api(
+          `/providers?city=${encodeURIComponent(city)}${facultyRef.current ? "&facultyDemo=1" : ""}`,
+        ),
         api("/categories"),
         api("/config"),
       ]);
@@ -99,7 +112,7 @@ export function AppProvider({ children }) {
   }, []);
   useEffect(() => {
     if (!loading && !sessionClient.locked) refresh();
-  }, [selectedCity, refresh, loading]);
+  }, [selectedCity, facultyDemo, refresh, loading]);
   const userRef = useRef(null),
     channelRef = useRef(null),
     checkRef = useRef(0),
@@ -110,6 +123,7 @@ export function AppProvider({ children }) {
     [reauth, setReauth] = useState(false),
     [logoutFailed, setLogoutFailed] = useState(false);
   const clearPrivate = useCallback(() => {
+    clearExternalIdentity().catch(() => {});
     userRef.current = null;
     rawSetUser(null);
     setToast("");
@@ -309,11 +323,17 @@ export function AppProvider({ children }) {
     });
   };
   const logout = async () => {
+    clearDraftReference(sessionStorage);
+    try {
+      sessionStorage.removeItem("gs_assistant_public_selection");
+    } catch {}
     logoutRef.current = true;
     sessionClient.invalidate("logout");
+    const firebaseCleanup = clearExternalIdentity();
     clearPrivate();
     try {
       await api("/auth/logout", { method: "POST" });
+      await firebaseCleanup;
       channelRef.current?.send();
       window.location.reload();
     } catch {
@@ -332,6 +352,8 @@ export function AppProvider({ children }) {
         loading,
         selectedCity,
         setSelectedCity,
+        facultyDemo,
+        setFacultyDemo,
         providers: providers.filter(
           (p) => canonicalCity(p.city) === selectedCity,
         ),

@@ -1,3 +1,4 @@
+import { canonicalCity } from "../../shared/cities.js";
 import { validateSchedule } from "./domain.js";
 import { indiaDate } from "./assistant-conversation.js";
 export function matchProviders(
@@ -7,19 +8,38 @@ export function matchProviders(
   bookings,
   { bookingEnabled = true, now = new Date() } = {},
 ) {
-  if (!bookingEnabled) return [];
+  if (!bookingEnabled) people = people.filter((p) => p.facultyDemo);
   const date = prefs.date || indiaDate(1, now);
   const ranked = people
     .filter(
       (p) =>
         (p.categories || [p.category]).includes(category.slug) &&
         p.available &&
-        (!prefs.city || p.city.toLowerCase() === prefs.city.toLowerCase()) &&
+        String(p._id) !== prefs.excludedProvider &&
+        (!prefs.city || canonicalCity(p.city) === canonicalCity(prefs.city)) &&
         (!prefs.area ||
-          (p.area || "").toLowerCase() === prefs.area.toLowerCase()) &&
+          (p.area || "")
+            .normalize("NFKC")
+            .trim()
+            .replace(/\s+/g, " ")
+            .toLowerCase() ===
+            prefs.area
+              .normalize("NFKC")
+              .trim()
+              .replace(/\s+/g, " ")
+              .toLowerCase()) &&
         (!prefs.budget || p.price <= prefs.budget),
     )
     .map((p) => {
+      if (p.facultyDemo)
+        return {
+          ...p,
+          availability: { date, slots: [] },
+          reasons: [
+            p.facultyDemoLabel,
+            "Display only. Bookings and payments are disabled.",
+          ],
+        };
       const slots = (p.slots || []).filter((time) => {
         try {
           validateSchedule(date, time, p, now);
@@ -51,7 +71,7 @@ export function matchProviders(
     })
     .filter(
       (p) =>
-        p.availability.slots.length &&
+        (p.facultyDemo || p.availability.slots.length) &&
         (!prefs.time || p.availability.slots.includes(prefs.time)),
     )
     .sort((a, b) =>

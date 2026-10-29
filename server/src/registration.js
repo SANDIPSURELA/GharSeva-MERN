@@ -549,12 +549,16 @@ export function mountRegistration(
   });
   app.post("/api/auth/external", checkLimit, async (req, res) => {
     // External identity mapping, not a login-page selection, determines the local role.
-    const identity = await verifyIdentity(req.body.idToken);
+    const identity = await verifyIdentity(req.body.idToken, req.body.provider);
     if (!["register", "login", "link"].includes(req.body.action))
       fail(400, "Choose a valid sign-in action.");
+    if (
+      req.body.provider !== undefined &&
+      (!["google", "apple"].includes(req.body.provider) ||
+        identity.provider !== req.body.provider + ".com")
+    )
+      fail(401, "The verified identity does not match the selected provider.");
     const linked = await ExternalIdentity.findOne({ uid: identity.uid });
-    if (linked && linked.provider !== identity.provider)
-      fail(403, "Use the external provider originally linked to this account.");
     if (req.body.action === "link") {
       await new Promise((resolve, reject) =>
         auth(req, res, (e) => (e ? reject(e) : resolve())),
@@ -567,32 +571,49 @@ export function mountRegistration(
         !(await bcrypt.compare(req.body.currentPassword, user.passwordHash))
       )
         fail(401, "Confirm your current GharSeva password before linking.");
-      if (
-        identity.provider === "apple.com" &&
-        /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/.test(
-          identity.contact,
-        ) &&
-        req.body.appleRelayConsent !== true
-      )
+      const relay = /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/i;
+      const needsRelayConsent =
+        (identity.provider === "apple.com" && relay.test(identity.contact)) ||
+        relay.test(user.email) ||
+        Boolean(user.appleRelayConsentAt);
+      if (needsRelayConsent && req.body.appleRelayConsent !== true)
         fail(
           400,
-          "Consent is required before linking your Apple private relay identity.",
+          "Consent is required before associating another sign-in method with an Apple private relay identity.",
         );
       checkStoredLoginRole(user, true);
       if (linked && String(linked.user) !== String(user._id))
         fail(409, "This identity is already linked to a different account.");
-      if (!linked)
-        await ExternalIdentity.create({
-          uid: identity.uid,
-          provider: identity.provider,
-          user: user._id,
-        });
-      if (
-        identity.provider === "apple.com" &&
-        /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/.test(
-          identity.contact,
-        )
-      )
+      if (!linked) {
+        try {
+          await ExternalIdentity.create({
+            uid: identity.uid,
+            provider: identity.provider,
+            user: user._id,
+          });
+        } catch (error) {
+          if (error.code !== 11000) throw error;
+          const concurrent = await ExternalIdentity.findOne({
+            uid: identity.uid,
+          });
+          if (
+            !concurrent ||
+            String(concurrent.user) !== String(user._id) ||
+            (concurrent.provider !== identity.provider &&
+              !concurrent.additionalProviders?.includes(identity.provider))
+          )
+            fail(
+              409,
+              "This identity cannot be linked. Use its existing sign-in or contact support.",
+            );
+        }
+      } else if (linked.provider !== identity.provider) {
+        await ExternalIdentity.updateOne(
+          { _id: linked._id, user: user._id },
+          { $addToSet: { additionalProviders: identity.provider } },
+        );
+      }
+      if (needsRelayConsent)
         await User.updateOne(
           { _id: user._id },
           { $set: { appleRelayConsentAt: new Date() } },
@@ -600,6 +621,14 @@ export function mountRegistration(
       return res.json({ ok: true });
     }
     if (linked) {
+      if (
+        linked.provider !== identity.provider &&
+        !linked.additionalProviders?.includes(identity.provider)
+      )
+        fail(
+          403,
+          "Use an explicitly linked sign-in provider for this account.",
+        );
       const user = await User.findOne({
         _id: linked.user,
         status: "ACTIVE",
@@ -613,7 +642,7 @@ export function mountRegistration(
     if (await User.exists({ email: identity.contact }))
       fail(
         409,
-        "An account already uses this email. Sign in with its password, then link this sign-in method in Account settings.",
+        "This sign-in cannot create a separate account. Use your existing sign-in, then explicitly link the method in Account settings.",
       );
     res.json({
       onboarding: true,

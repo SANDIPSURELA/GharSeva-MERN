@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { socialReadiness } from "./social-readiness.js";
 import { emailReadiness } from "./email-delivery.js";
 import { paymentReadiness } from "./payment-gateway.js";
 import { fileURLToPath } from "node:url";
@@ -101,21 +102,20 @@ export function inspectEnvironment(
       errors.push(
         "ASSISTANT_AI_ENABLED requires the server-side OPENAI_API_KEY.",
       );
+    if (env.FIREBASE_AUTH_EMULATOR_HOST)
+      errors.push("Firebase Auth emulator is forbidden in production.");
     if (
       ["AUTH_GOOGLE_ENABLED", "AUTH_APPLE_ENABLED"].some(
         (key) => env[key] === "true",
-      ) &&
-      !(
-        env.FIREBASE_PROJECT_ID &&
-        env.FIREBASE_WEB_API_KEY &&
-        env.FIREBASE_AUTH_DOMAIN &&
-        (env.GOOGLE_APPLICATION_CREDENTIALS ||
-          (env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY))
       )
-    )
-      errors.push(
-        "Enabled Google or Apple login requires the Firebase client and server configuration.",
-      );
+    ) {
+      const social = socialReadiness(env);
+      if (!social.ready)
+        warnings.push(
+          "Enabled social sign-in is unavailable until Firebase setup is valid. Password/email OTP settings remain independent.",
+          ...social.errors,
+        );
+    }
   }
   return { errors, warnings };
 }

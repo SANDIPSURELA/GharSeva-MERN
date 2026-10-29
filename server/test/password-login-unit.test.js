@@ -15,6 +15,8 @@ import {
   RegistrationSession,
   PasswordRecovery,
 } from "../src/models.js";
+import { createApp } from "../src/app.js";
+import { createHash } from "node:crypto";
 import { mountPasswordLogin } from "../src/password-login.js";
 import { mountRegistration } from "../src/registration.js";
 import { auth, role as requireRole } from "../src/auth.js";
@@ -84,6 +86,9 @@ function update(record, changes, inserting = false) {
     changes.$set || {},
     inserting ? changes.$setOnInsert || {} : {},
   );
+  for (const [key, value] of Object.entries(changes.$addToSet || {})) {
+    if (!(record[key] || []).includes(value)) (record[key] ||= []).push(value);
+  }
   for (const [key, count] of Object.entries(changes.$inc || {}))
     record[key] = (record[key] || 0) + count;
   for (const [key, value] of Object.entries(changes.$push || {}))
@@ -107,6 +112,13 @@ function persistence(model) {
     query(rows.some((r) => matches(r, filter))),
   );
   mock.method(model, "create", async (data) => {
+    if (
+      model === User &&
+      rows.some((row) => row.email === data.email || row.mobile === data.mobile)
+    )
+      throw Object.assign(Error("fixture duplicate account"), { code: 11000 });
+    if (model === ExternalIdentity && rows.some((row) => row.uid === data.uid))
+      throw Object.assign(Error("fixture duplicate identity"), { code: 11000 });
     const record = { _id: new mongoose.Types.ObjectId(), ...data };
     rows.push(record);
     return clone(record);
@@ -1091,4 +1103,338 @@ test("late provider acceptance cannot revive a contact challenge that expired du
   assert.equal(result.data.challengeId, undefined);
   assert.equal(result.cookies.has("gharseva_session"), false);
   assert.equal(tables.get(ContactChallenge).length, 0);
+});
+
+test("selected-provider mismatch and forged role/email fields cannot change account identity", async () => {
+  const user = await account("customer");
+  Object.assign(tables.get(User)[0], { city: "Vadodara" });
+  user.city = "Vadodara";
+  user.termsAcceptedAt = new Date(2020, 1, 1);
+  user.verification = { email: { mode: "live", at: new Date() } };
+  identities.set("stable", {
+    uid: "stable",
+    provider: "google.com",
+    contact: "trusted@example.test",
+  });
+  await ExternalIdentity.create({
+    uid: "stable",
+    provider: "google.com",
+    user: user._id,
+  });
+  assert.equal(
+    (
+      await call("post", "/api/auth/external", {
+        action: "login",
+        idToken: "stable",
+        provider: "apple",
+      })
+    ).status,
+    401,
+  );
+  const result = await call("post", "/api/auth/external", {
+    action: "login",
+    idToken: "stable",
+    provider: "google",
+    role: "admin",
+    email: "forged@example.test",
+    city: "Ahmedabad",
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.data.user.role, "customer");
+  assert.equal(result.data.user.email, user.email);
+  assert.equal(result.data.user.city, "Vadodara");
+  assert.equal(tables.get(User)[0].passwordHash, user.passwordHash);
+});
+test("concurrent first social sign-ins create onboarding proof, never an application account/session", async () => {
+  identities.set("new", {
+    uid: "new",
+    provider: "apple.com",
+    contact: "anonymous@privaterelay.appleid.com",
+    name: "",
+  });
+  const results = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      call("post", "/api/auth/external", {
+        action: "login",
+        idToken: "new",
+        provider: "apple",
+        role: "admin",
+        email: "forged@example.test",
+      }),
+    ),
+  );
+  assert.ok(
+    results.every((r) => r.status === 200 && r.data.onboarding === true),
+  );
+  assert.ok(results.every((r) => !r.cookies.has("gharseva_session")));
+  assert.ok(
+    results.every(
+      (r) => r.data.identity.contact === "anonymous@privaterelay.appleid.com",
+    ),
+  );
+  assert.equal(tables.get(User).length, 0);
+  assert.equal(tables.get(AuthSession).length, 0);
+});
+test("concurrent linking is idempotent; adding a provider to the same UID requires explicit password proof and relay consent", async () => {
+  const user = await account(),
+    logged = await verify(await begin(user));
+  identities.set("google", {
+    uid: "common-uid",
+    provider: "google.com",
+    contact: user.email,
+  });
+  const link = (token, extra = {}) =>
+    call(
+      "post",
+      "/api/auth/external",
+      {
+        action: "link",
+        idToken: token,
+        currentPassword: "Example123!",
+        ...extra,
+      },
+      logged.cookies,
+    );
+  const rs = await Promise.all([link("google"), link("google")]);
+  assert.ok(
+    rs.every((r) => r.status === 200),
+    JSON.stringify(rs),
+  );
+  assert.equal(tables.get(ExternalIdentity).length, 1);
+  identities.set("apple", {
+    uid: "common-uid",
+    provider: "apple.com",
+    contact: "anonymous@privaterelay.appleid.com",
+  });
+  const login = () =>
+    call("post", "/api/auth/external", {
+      action: "login",
+      idToken: "apple",
+      provider: "apple",
+    });
+  assert.equal((await login()).status, 403);
+  assert.equal((await link("apple")).status, 400);
+  assert.equal(
+    (await link("apple", { currentPassword: "wrong", appleRelayConsent: true }))
+      .status,
+    401,
+  );
+  assert.equal((await link("apple", { appleRelayConsent: true })).status, 200);
+  assert.equal((await link("apple", { appleRelayConsent: true })).status, 200);
+  assert.deepEqual(tables.get(ExternalIdentity)[0].additionalProviders, [
+    "apple.com",
+  ]);
+  assert.equal((await login()).data.user._id, user._id);
+  assert.equal(tables.get(User)[0].email, user.email);
+});
+test("link ownership, administrator boundary and provider documents/approval remain stored decisions", async () => {
+  const pending = await account("provider"),
+    admin = await account("admin"),
+    other = await account();
+  const saved = tables
+    .get(User)
+    .find((u) => String(u._id) === String(pending._id));
+  Object.assign(saved, {
+    city: "Surat",
+    profile: {
+      status: "PENDING",
+      documents: ["fixture-private-document"],
+      city: "Surat",
+      price: 499,
+    },
+  });
+  identities.set("pending", {
+    uid: "pending",
+    provider: "apple.com",
+    contact: "relay@privaterelay.appleid.com",
+  });
+  await ExternalIdentity.create({
+    uid: "pending",
+    provider: "apple.com",
+    user: pending._id,
+  });
+  const original = JSON.stringify(saved);
+  for (let n = 0; n < 2; n++)
+    assert.equal(
+      (
+        await call("post", "/api/auth/external", {
+          action: "login",
+          idToken: "pending",
+          provider: "apple",
+          role: "admin",
+          name: "replace",
+          city: "Ahmedabad",
+        })
+      ).status,
+      200,
+    );
+  assert.equal(JSON.stringify(saved), original);
+  const ownerLogin = await verify(await begin(other));
+  assert.equal(
+    (
+      await call(
+        "post",
+        "/api/auth/external",
+        {
+          action: "link",
+          idToken: "pending",
+          currentPassword: "Example123!",
+          appleRelayConsent: true,
+        },
+        ownerLogin.cookies,
+      )
+    ).status,
+    409,
+  );
+  const adminLogin = await verify(await begin(admin));
+  assert.equal(
+    (
+      await call(
+        "post",
+        "/api/auth/external",
+        {
+          action: "link",
+          idToken: "pending",
+          currentPassword: "Example123!",
+          appleRelayConsent: true,
+        },
+        adminLogin.cookies,
+      )
+    ).status,
+    403,
+  );
+});
+async function completeSocialCustomer(overrides = {}) {
+  const token = "a".repeat(64),
+    cookieToken = createHash("sha256").update(token).digest("hex");
+  if (!tables.get(RegistrationSession).some((s) => s.tokenHash === cookieToken))
+    await RegistrationSession.create({
+      tokenHash: cookieToken,
+      channel: "email",
+      contact: "new-social@example.test",
+      mode: "live",
+      externalUid: "new-social-uid",
+      externalProvider: "google.com",
+      expiresAt: new Date(Date.now() + 600000),
+    });
+  const app = createApp(),
+    route = app.router.stack.find(
+      (layer) => layer.route?.path === "/api/auth/register",
+    ).route;
+  const req = {
+    body: {
+      role: "customer",
+      name: "New Social Customer",
+      email: "new-social@example.test",
+      mobile: "9876599001",
+      password: "ChosenPassword123!",
+      city: " Ahemdabad ",
+      terms: true,
+      verifiedRegistration: true,
+      ...overrides,
+    },
+    headers: { cookie: "gharseva_registration=" + token },
+    is: () => false,
+  };
+  const result = { status: 200, cookies: new Map() };
+  const res = {
+    cookie: (k, v) => result.cookies.set(k, v),
+    clearCookie: (k) => result.cookies.delete(k),
+    status: (v) => {
+      result.status = v;
+      return res;
+    },
+    json: (v) => {
+      result.data = v;
+      return res;
+    },
+  };
+  try {
+    await route.stack.at(-1).handle(req, res);
+  } catch (error) {
+    result.status = error.status || (error.code === 11000 ? 409 : 500);
+    result.error = error.message;
+  }
+  return result;
+}
+test("actual social registration handler validates city, consent, contact and role without invented credentials", async () => {
+  for (const invalid of [
+    { city: "" },
+    { city: "not-a-city" },
+    { terms: false },
+    { role: "admin" },
+    { email: "forged@example.test" },
+  ]) {
+    const result = await completeSocialCustomer(invalid);
+    assert.equal(result.status, 400, JSON.stringify(result));
+    assert.equal(tables.get(User).length, 0);
+  }
+  const created = await completeSocialCustomer();
+  assert.equal(created.status, 201, JSON.stringify(created));
+  assert.equal(created.data.city, "Ahmedabad");
+  assert.equal(created.data.role, "customer");
+  assert.equal(created.data.verification.email.mode, "live");
+  assert.ok(
+    await bcrypt.compare(
+      "ChosenPassword123!",
+      tables.get(User)[0].passwordHash,
+    ),
+  );
+  assert.equal(tables.get(ExternalIdentity).length, 1);
+  assert.equal(created.cookies.has("gharseva_session"), true);
+});
+test("actual concurrent first registration keeps one account and binding, and preserves its chosen password", async () => {
+  const rs = await Promise.all([
+    completeSocialCustomer(),
+    completeSocialCustomer(),
+  ]);
+  assert.equal(
+    rs.filter((r) => r.status === 201).length,
+    1,
+    JSON.stringify(rs),
+  );
+  assert.equal(tables.get(User).length, 1);
+  assert.equal(tables.get(ExternalIdentity).length, 1);
+  assert.ok(
+    await bcrypt.compare(
+      "ChosenPassword123!",
+      tables.get(User)[0].passwordHash,
+    ),
+  );
+});
+
+test("linking identifying Google credentials to an existing Apple relay account requires fresh explicit consent", async () => {
+  const user = await account(),
+    stored = tables.get(User)[0];
+  stored.email = "existing@privaterelay.appleid.com";
+  user.email = stored.email;
+  const logged = await verify(await begin(user));
+  identities.set("identifying-google", {
+    uid: "identifying-google",
+    provider: "google.com",
+    contact: "identifying@example.test",
+  });
+  const body = {
+    action: "link",
+    idToken: "identifying-google",
+    provider: "google",
+    currentPassword: "Example123!",
+  };
+  assert.equal(
+    (await call("post", "/api/auth/external", body, logged.cookies)).status,
+    400,
+  );
+  assert.equal(tables.get(ExternalIdentity).length, 0);
+  assert.equal(
+    (
+      await call(
+        "post",
+        "/api/auth/external",
+        { ...body, appleRelayConsent: true },
+        logged.cookies,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(stored.email, user.email);
 });

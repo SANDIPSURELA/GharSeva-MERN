@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
+import {
+  createIsolatedMongo,
+  connectIsolatedMongo,
+} from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import {
   User,
@@ -520,4 +523,57 @@ test("invalid AI categories and incomplete or refused output cannot become booki
     "plumbing",
   );
   assert.equal(await Booking.countDocuments(), 0);
+});
+
+test("owned draft recovery and minimal receipts preserve a single connected booking", async () => {
+  const draft = await call("/assistant/drafts", { as: jar, body: input() });
+  assert.equal(draft.status, 201);
+  assert.ok(draft.data.paymentPlan);
+  const foreign = await call("/assistant/drafts/" + draft.data._id, {
+    as: otherJar,
+  });
+  assert.equal(foreign.status, 404);
+  const prepared = await call("/assistant/drafts/" + draft.data._id, {
+    as: jar,
+  });
+  assert.equal(prepared.data.draft.address, input().address);
+  const confirmed = await call(
+    "/assistant/drafts/" + draft.data._id + "/confirm",
+    { as: jar, body: { confirm: true } },
+  );
+  assert.equal(confirmed.status, 201);
+  assert.equal(confirmed.data.visitCode, undefined);
+  const recovered = await call("/assistant/drafts/" + draft.data._id, {
+    as: jar,
+  });
+  assert.equal(recovered.data.booking._id, confirmed.data._id);
+  assert.equal(recovered.data.booking.visitCode, undefined);
+  assert.equal(
+    (
+      await call("/assistant/drafts/" + draft.data._id, {
+        as: jar,
+        method: "DELETE",
+      })
+    ).status,
+    409,
+  );
+  assert.equal(await Booking.countDocuments(), 1);
+});
+test("connected confirmation rejects a changed reviewed service area", async () => {
+  const draft = await call("/assistant/drafts", { as: jar, body: input() });
+  await User.updateOne(
+    { _id: provider._id },
+    { $set: { "profile.area": "Navrangpura" } },
+  );
+  const confirmed = await call(
+    "/assistant/drafts/" + draft.data._id + "/confirm",
+    { as: jar, body: { confirm: true } },
+  );
+  assert.equal(confirmed.status, 409);
+  assert.equal(await Booking.countDocuments(), 0);
+  assert.equal(
+    (await call("/assistant/drafts/" + draft.data._id, { as: jar })).data.draft
+      .address,
+    input().address,
+  );
 });

@@ -1,4 +1,9 @@
 import { requireCity, cityFilter, bookingCity } from "./cities.js";
+import {
+  mountFacultyShowcase,
+  facultyPublicProviders,
+  ownerImportedDemo,
+} from "./faculty-showcase.js";
 import { canonicalCity, supportedCities } from "../../shared/cities.js";
 import { paymentPlanSnapshot } from "./billing-domain.js";
 import {
@@ -148,7 +153,10 @@ async function profileInput(body) {
       : ["General service"],
   };
 }
-export async function publicProviders(filter = {}) {
+export async function publicProviders(
+  filter = {},
+  { facultyDemo = false } = {},
+) {
   const cats = await Category.find({ enabled: true }).lean();
   const users = await User.find({
     role: "provider",
@@ -160,7 +168,8 @@ export async function publicProviders(filter = {}) {
     ],
     ...filter,
   }).lean();
-  const ids = users.map((x) => x._id);
+  const realUsers = users.filter((u) => !ownerImportedDemo(u));
+  const ids = realUsers.map((x) => x._id);
   const [ratings, jobs, portfolioFiles] = await Promise.all([
     Review.aggregate([
       { $match: { provider: { $in: ids }, hidden: false } },
@@ -180,7 +189,7 @@ export async function publicProviders(filter = {}) {
       .select("_id owner kind")
       .lean(),
   ]);
-  return users.map((u) => {
+  const real = realUsers.map((u) => {
     const r = ratings.find((x) => String(x._id) === String(u._id));
     const j = jobs.find((x) => String(x._id) === String(u._id));
     const enabledCategories = [
@@ -205,6 +214,9 @@ export async function publicProviders(filter = {}) {
       categoryName: cats.find((x) => x.slug === enabledCategories[0])?.name,
     };
   });
+  return facultyDemo
+    ? [...real, ...(await facultyPublicProviders(filter))]
+    : real;
 }
 export async function bookingView(query, user) {
   const rows = await Booking.find(query)
@@ -233,6 +245,11 @@ export async function createCustomerBooking(user, input, extra = {}) {
     "profile.status": "APPROVED",
   });
   if (!provider) fail(404, "Provider not available.");
+  if (ownerImportedDemo(provider))
+    fail(
+      403,
+      "Faculty showcase profiles cannot receive customer bookings. Use the isolated classroom sandbox.",
+    );
   const cat = await Category.findOne({
     slug: input.category || provider.profile.category,
     enabled: true,
@@ -257,11 +274,28 @@ export async function createCustomerBooking(user, input, extra = {}) {
       409,
       "The starting estimate changed. Prepare and review a new booking before confirming.",
     );
+  if (
+    extra.expectedArea !== undefined &&
+    (extra.expectedArea || "").trim().replace(/\s+/g, " ").toLowerCase() !==
+      (provider.profile.area || "").trim().replace(/\s+/g, " ").toLowerCase()
+  )
+    fail(409, "The professional service area changed. Review current options.");
+  const plan = paymentPlanSnapshot(provider.profile.price);
+  if (
+    extra.expectedPaymentPlan &&
+    ["type", "mode", "currency", "depositAmount", "estimateAmount"].some(
+      (key) => plan[key] !== extra.expectedPaymentPlan[key],
+    )
+  )
+    fail(
+      409,
+      "Deposit terms changed. Review the current request before confirming.",
+    );
   const b = await Booking.create({
     ...(extra.assistantDraft ? { assistantDraft: extra.assistantDraft } : {}),
     city,
     customer: user._id,
-    paymentPlan: paymentPlanSnapshot(provider.profile.price),
+    paymentPlan: plan,
     provider: provider._id,
     category: cat.slug,
     service: cat.name,
@@ -379,6 +413,7 @@ export function createApp({
   mountAccountInvitations(app, { settings });
   mountPayments(app, { gateway: paymentGateway });
   mountProviderIdentity(app, { ocr: identityOcr });
+  mountFacultyShowcase(app);
   mountAssistant(app, {
     settings,
     publicProviders,
@@ -407,6 +442,7 @@ export function createApp({
     res.json({
       bookingEnabled: s.bookingEnabled,
       providerRegistration: s.providerRegistration,
+      facultyDemoAvailable: s.facultyDemoEnabled === true,
     });
   });
   app.get("/api/categories", async (req, res) =>
@@ -430,17 +466,25 @@ export function createApp({
     }
     res.json(
       city
-        ? await publicProviders({
-            ...cityFilter(city),
-            ...serviceFilter,
-            "profile.available": true,
-          })
+        ? await publicProviders(
+            {
+              ...cityFilter(city),
+              ...serviceFilter,
+              "profile.available": true,
+            },
+            { facultyDemo: req.query.facultyDemo === "1" },
+          )
         : [],
     );
   });
   app.get("/api/providers/:id", async (req, res) => {
-    const providers = await publicProviders({ _id: id(req.params.id) });
+    const providers = await publicProviders(
+      { _id: id(req.params.id) },
+      { facultyDemo: req.query.facultyDemo === "1" },
+    );
     if (!providers.length) fail(404, "This provider is not available.");
+    if (providers[0].facultyDemo)
+      return res.json({ ...providers[0], feedback: [] });
     const reviews = await Review.find({
       provider: providers[0]._id,
       hidden: false,
@@ -931,6 +975,11 @@ export function createApp({
         fail(409, "Only pending or accepted bookings can be cancelled.");
     } else if (req.user.role === "provider") {
       if (!provider) fail(403, "This is not your booking.");
+      if (ownerImportedDemo(req.user))
+        fail(
+          403,
+          "Faculty showcase accounts cannot manage real customer bookings.",
+        );
       if (req.user.profile.status !== "APPROVED")
         fail(403, "Your provider profile is awaiting approval.");
       if (!transitions[b.status]?.includes(status))

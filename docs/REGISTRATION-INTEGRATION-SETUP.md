@@ -4,6 +4,8 @@
 
 # Registration integrations: setup and testing
 
+Current social-sign-in handoff: [SOCIAL-SIGNIN-SETUP-AND-VERIFICATION.md](../SOCIAL-SIGNIN-SETUP-AND-VERIFICATION.md). Configuration checks do not prove provider activation or successful OAuth.
+
 This project now contains the registration workflow and delivery adapters. No Google, Apple, SMTP or Twilio account has been connected on your behalf. Do not describe live delivery or external sign-in as tested until you complete the checks below.
 
 ## 1. Run the complete classroom demonstration first
@@ -48,7 +50,7 @@ Existing email/password and mobile/password sign-in both require a code delivere
 2. In Firebase Authentication, configure the Google sign-in provider and its support email.
 3. Add `localhost` and your deployed frontend hostname under Authentication's authorised domains. Do not assume a newly created project has localhost enabled automatically.
 4. Create a server service account using Firebase's Admin SDK/service-account settings. Keep its JSON outside this project and set `GOOGLE_APPLICATION_CREDENTIALS` to that private file's absolute path. Alternatively set `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` using your hosting service's secret environment variables. Use one credential approach.
-5. Set `AUTH_GOOGLE_ENABLED=true`, restart the API and reopen the page. The Google control becomes enabled when public configuration and server credentials are present.
+5. Set `AUTH_GOOGLE_ENABLED=true`, restart the API and reopen the page. The Google control becomes enabled when the selected provider flag and locally valid public/Admin settings are present; external activation and real sign-in remain separate tests.
 6. Test signup with a new Google identity. The server verifies a Firebase ID token, including revocation, provider, verified email and recent authentication. Complete the required GharSeva details and password. The UID is linked to that newly created local account.
 7. Sign out and test Google sign-in. For an existing password account, sign in first and use **Account settings** to link Google after confirming the current GharSeva password. A matching typed email alone does not link identities.
 
@@ -63,7 +65,7 @@ Official references: [Google web sign-in](https://firebase.google.com/docs/auth/
 3. Enable Apple in Firebase Authentication and supply the Services ID, Team ID, Key ID and private signing key in Firebase's Apple provider settings. Do not put Apple's private key in React.
 4. Set `AUTH_APPLE_ENABLED=true` and restart the API. Test popup/callback behaviour on the authorised HTTPS domain and supported browsers.
 5. Test both Apple's shared-email and private-relay choices. Private-relay signup requires explicit consent before associating that identity with the submitted GharSeva name/mobile details. Names can be absent on later Apple sign-ins; collect a missing name in GharSeva rather than inventing it.
-6. If sending emails to Apple relay addresses, configure Apple's private email relay with the sender domains/addresses used by your SMTP service. Check delivery to those addresses explicitly.
+6. If sending emails to Apple relay addresses, configure Apple's private email relay with the sender domains/addresses used by your selected email transport (Brevo HTTPS on Render Free, SMTP elsewhere). Check delivery to those addresses explicitly.
 
 A provider account still needs both the existing contact fields and a local password during initial onboarding; external identity proof does not bypass professional document review.
 
@@ -115,7 +117,6 @@ Test saved-draft ownership, follow-up contact masking, document privacy, correct
 Codes expire after 5 minutes, allow at most 5 checks and have per-contact/IP request limits. Registration proof expires after 30 minutes. Incomplete drafts expire 30 days after the latest save. Draft passwords/files are not retained. Submitted documents remain private and manually reviewed.
 
 Real Aadhaar authentication, document OCR, AI eligibility decisions, payment processing and public hosting remain separate milestones. Verified-contact password recovery is now included; see the login/recovery section below. The admin checklist is explicitly rule-based, and only the administrator decides approval/rejection.
-
 
 ## 8. Shared login and password recovery (current)
 

@@ -1,5 +1,7 @@
 # Conversational customer assistant — 25 October 2026
 
+> **Historical checkpoint (25 October).** Current milestone 5 behavior, language/privacy boundaries, draft recovery, deposit review and validation results are documented in [ASSISTANT-BOOKING-VERIFICATION.md](../ASSISTANT-BOOKING-VERIFICATION.md). The original implementation evidence below is retained; its older English-only, raw-text-redaction and refresh descriptions are superseded.
+
 Implemented directly in the existing project. This document supersedes the earlier assistant milestone notes. No database was reset, seeded, migrated or replaced for this change. The existing authentication, OTP styles, professional images, approval rules and payment workflow remain in place.
 
 ## Customer flow
@@ -93,16 +95,16 @@ Still unverified: a full real-MongoDB HTTP regression run, a live-database brows
 
 ## Files changed
 
-| File | Purpose |
-| --- | --- |
-| `client/src/pages/ServiceAssistant.jsx` | Structured conversational discovery, inline controls/cards/address/review/receipt and public login handoff |
-| `client/src/pages/ServiceAssistant.css` | Scoped responsive chat/card/summary styling and focus states |
-| `client/src/pages/Public.jsx` | Assistant privacy notice reflects current description and public login selection handling |
-| `server/src/assistant-conversation.js` | New allowlisted public discovery state, focused next steps and corrections |
-| `server/src/assistant-matching.js` | New schedule/active-booking matching and factual reasons |
-| `server/src/assistant-analysis.js` | Short/typo descriptions, ambiguity/unsupported handling and constrained multilingual AI instructions/validation |
-| `server/src/service-assistant.js` | Conversation endpoint, availability-aware matching, shared adapter fallback and displayed-estimate checks |
-| `server/src/app.js` | Exports existing public-provider/booking helpers for exercising the actual workflow in regression tests; ordinary booking logic unchanged |
-| `server/test/assistant-conversation-unit.test.js` | New 19 focused regression tests with mocked AI/persistence |
-| `server/test/service-assistant.test.js` | Clear service now expects no unnecessary follow-up questionnaire |
-| `docs/CUSTOMER-ASSISTANT-UPDATE.md` | Current implementation, review steps, configuration and actual validation results |
+| File                                              | Purpose                                                                                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `client/src/pages/ServiceAssistant.jsx`           | Structured conversational discovery, inline controls/cards/address/review/receipt and public login handoff                                |
+| `client/src/pages/ServiceAssistant.css`           | Scoped responsive chat/card/summary styling and focus states                                                                              |
+| `client/src/pages/Public.jsx`                     | Assistant privacy notice reflects current description and public login selection handling                                                 |
+| `server/src/assistant-conversation.js`            | New allowlisted public discovery state, focused next steps and corrections                                                                |
+| `server/src/assistant-matching.js`                | New schedule/active-booking matching and factual reasons                                                                                  |
+| `server/src/assistant-analysis.js`                | Short/typo descriptions, ambiguity/unsupported handling and constrained multilingual AI instructions/validation                           |
+| `server/src/service-assistant.js`                 | Conversation endpoint, availability-aware matching, shared adapter fallback and displayed-estimate checks                                 |
+| `server/src/app.js`                               | Exports existing public-provider/booking helpers for exercising the actual workflow in regression tests; ordinary booking logic unchanged |
+| `server/test/assistant-conversation-unit.test.js` | New 19 focused regression tests with mocked AI/persistence                                                                                |
+| `server/test/service-assistant.test.js`           | Clear service now expects no unnecessary follow-up questionnaire                                                                          |
+| `docs/CUSTOMER-ASSISTANT-UPDATE.md`               | Current implementation, review steps, configuration and actual validation results                                                         |

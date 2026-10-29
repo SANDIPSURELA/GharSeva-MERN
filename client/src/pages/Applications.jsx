@@ -11,11 +11,10 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { api, label } from "../api";
+import { signInExternal } from "../external-identity";
+import { externalSignInMessage } from "../../../shared/external-auth.js";
 import { useApp } from "../context";
-import {
-  ContactVerification,
-  externalToken,
-} from "../components/ContactVerification";
+import { ContactVerification } from "../components/ContactVerification";
 import "./Applications.css";
 const states = [
   ["", "All requests"],
@@ -445,6 +444,7 @@ export function ProviderApplicationStatus() {
 }
 export function ConnectedSignIn() {
   const { user, setUser } = useApp();
+  const linkLock = useRef(false);
   const [options, setOptions] = useState(null),
     [password, setPassword] = useState(""),
     [relayConsent, setRelayConsent] = useState(false),
@@ -517,8 +517,8 @@ export function ConnectedSignIn() {
           onChange={(e) => setRelayConsent(e.target.checked)}
           disabled={busy}
         />{" "}
-        I consent to associating an Apple private relay identity with my
-        GharSeva account, if used.
+        I consent to linking Apple private relay identities with the contact
+        details and other sign-in methods on this account.
       </label>
       <div className="gs-verify__social">
         {["google", "apple"].map((provider) => (
@@ -527,31 +527,24 @@ export function ConnectedSignIn() {
             type="button"
             disabled={busy || !password || !options?.[provider]}
             onClick={async () => {
+              if (linkLock.current) return;
+              linkLock.current = true;
               setBusy(true);
               setMessage("");
               try {
-                const idToken = await externalToken(options, provider);
-                await api("/auth/external", {
-                  method: "POST",
-                  body: {
-                    action: "link",
-                    idToken,
-                    currentPassword: password,
-                    portal: user.role,
-                    appleRelayConsent: relayConsent,
-                  },
+                await signInExternal(options, provider, {
+                  action: "link",
+                  currentPassword: password,
+                  appleRelayConsent: relayConsent,
                 });
                 setPassword("");
                 setMessage(
                   `${label(provider)} sign-in linked to your account.`,
                 );
               } catch (e) {
-                setMessage(
-                  e.code
-                    ? "External sign-in could not finish. Try again."
-                    : e.message,
-                );
+                setMessage(externalSignInMessage(e));
               } finally {
+                linkLock.current = false;
                 setBusy(false);
               }
             }}

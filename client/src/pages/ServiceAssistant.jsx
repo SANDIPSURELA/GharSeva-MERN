@@ -1,6 +1,19 @@
+import {
+  savePublicSelection,
+  takePublicSelection,
+  saveDraftReference,
+  readDraftReference,
+  clearDraftReference,
+  AssistantRequestGate,
+} from "../../../shared/assistant-client-state.js";
 import { DiscoveryNotice } from "../components/DiscoveryNotice";
+import { FacultyDemoToggle } from "../components/FacultyDemoToggle";
 import { discoveryState } from "../../../shared/discovery-state.js";
-import { supportedCities, citySelection } from "../../../shared/cities.js";
+import {
+  supportedCities,
+  citySelection,
+  canonicalCity,
+} from "../../../shared/cities.js";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -16,7 +29,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useApp } from "../context";
-import { api, money, indiaToday, indiaDateAfter, prettyDate } from "../api";
+import { api, indiaToday, indiaDateAfter, prettyDate } from "../api";
 import { WorkPhoto } from "../components/WorkPhoto";
 import { resolveWorkImages } from "../../../shared/work-images.js";
 import "./ServiceAssistant.css";
@@ -39,12 +52,19 @@ const starters = [
   "Fan making noise",
   "Washing machine not draining",
 ];
-const resumeKey = "gs_assistant_public_selection";
+const money = (value) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(value || 0);
 export function ServiceAssistant() {
   const {
       user,
+      loading,
       categories,
       providers,
+      facultyDemo,
       selectedCity,
       setSelectedCity,
       discoveryLoading,
@@ -67,19 +87,80 @@ export function ServiceAssistant() {
     [error, setError] = useState(""),
     [retry, setRetry] = useState(null),
     [progress, setProgress] = useState("Discovery"),
-    [bookingDetails, setBookingDetails] = useState(null);
+    [bookingDetails, setBookingDetails] = useState(null),
+    [recovered, setRecovered] = useState(null),
+    [pendingRequest, setPendingRequest] = useState(false),
+    [recoveryRetry, setRecoveryRetry] = useState(0),
+    [resumeRetryAvailable, setResumeRetryAvailable] = useState(false);
   const lock = useRef(false),
     end = useRef(null),
     restored = useRef(false);
   const cities = supportedCities;
   const currentCity = useRef(selectedCity),
-    generation = useRef(0);
+    generation = useRef(new AssistantRequestGate());
+  const previousOwner = useRef(user?._id || "");
+  useEffect(() => {
+    generation.current.invalidate();
+    setResult(null);
+    setState((s) => ({ ...s, providerId: "", time: "" }));
+    lock.current = false;
+    setBusy(false);
+  }, [facultyDemo]);
+  useEffect(() => () => generation.current.invalidate(), []);
+  useEffect(() => {
+    const owner = user?._id || "";
+    if (previousOwner.current === owner) return;
+    previousOwner.current = owner;
+    generation.current.invalidate();
+    lock.current = false;
+    setBusy(false);
+    setBookingBusy(false);
+    setRecovered(null);
+    setPendingRequest(false);
+    setResumeRetryAvailable(false);
+    setBookingDetails(null);
+    setMessages([]);
+    setInput("");
+    setError("");
+    setRetry(null);
+    setResult(null);
+    setState({ ...empty, city: selectedCity });
+    setProgress("Discovery");
+  }, [user?._id]);
+  useEffect(() => {
+    if (loading) return;
+    const ref = readDraftReference(sessionStorage, user?._id);
+    if (!ref || user?.role !== "customer") return;
+    let active = true;
+    setPendingRequest(true);
+    setResumeRetryAvailable(false);
+    api("/assistant/drafts/" + ref.id)
+      .then((value) => {
+        if (!active) return;
+        setRecovered({ ...value, pending: ref.pending });
+        setPendingRequest(ref.pending && !value.booking);
+        setError("");
+      })
+      .catch((e) => {
+        if (!active) return;
+        if (e.status === 404) {
+          clearDraftReference(sessionStorage, ref.id);
+          setPendingRequest(false);
+        } else setResumeRetryAvailable(true);
+        setError("Prepared request could not load. " + e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loading, user?._id, recoveryRetry, selectedCity]);
+
   useEffect(() => {
     if (currentCity.current === selectedCity) return;
     currentCity.current = selectedCity;
-    generation.current++;
+    generation.current.invalidate();
     lock.current = false;
     setBusy(false);
+    setBookingBusy(false);
     setRetry(null);
     setResult(null);
     setMessages([]);
@@ -92,9 +173,16 @@ export function ServiceAssistant() {
     (p) => String(p._id) === state.providerId,
   );
   async function turn(event, base = state) {
-    if (lock.current || bookingBusy) return;
+    if (
+      lock.current ||
+      bookingBusy ||
+      pendingRequest ||
+      recovered ||
+      resumeRetryAvailable
+    )
+      return;
     lock.current = true;
-    const serial = generation.current;
+    const serial = generation.current.begin();
     setBusy(true);
     setError("");
     setRetry(null);
@@ -106,18 +194,37 @@ export function ServiceAssistant() {
           event,
           mode: useAI ? "ai" : "guided",
           shareWithAI: useAI,
+          facultyDemo,
         },
       });
-      if (serial !== generation.current) return;
+      if (!generation.current.valid(serial)) return;
+      const changed = [
+        "category",
+        "city",
+        "area",
+        "providerId",
+        "date",
+        "time",
+      ].some((key) => response.state[key] !== base[key]);
+      if (response.cancelled || changed) {
+        const ref = readDraftReference(sessionStorage, user?._id);
+        if (ref) {
+          await api("/assistant/drafts/" + ref.id, { method: "DELETE" });
+          if (!generation.current.valid(serial)) return;
+          clearDraftReference(sessionStorage, ref.id);
+        }
+        if (response.cancelled) setBookingDetails(null);
+      }
       currentCity.current = response.state.city;
       setSelectedCity(response.state.city);
-      setBookingDetails(null);
       setState(response.state);
       setResult(response);
       setInput("");
       setProgress(response.state.providerId ? "Appointment" : "Discovery");
       const userText =
-        event.type === "message"
+        event.type === "message" &&
+        !response.sensitiveRejected &&
+        !response.urgent
           ? event.value
           : event.type === "provider"
             ? "Choose this professional"
@@ -139,15 +246,15 @@ export function ServiceAssistant() {
         ].slice(-30),
       );
     } catch (e) {
-      if (serial !== generation.current) return;
+      if (!generation.current.valid(serial)) return;
       setError(
-        e.status === 404
-          ? "The API needs a restart to load this assistant update. Restart your existing backend, then retry."
+        e.status >= 500
+          ? "The service could not respond. Your choices are kept; try again."
           : e.message,
       );
       setRetry({ event, base });
     } finally {
-      if (serial === generation.current) {
+      if (generation.current.valid(serial)) {
         lock.current = false;
         setBusy(false);
       }
@@ -163,16 +270,24 @@ export function ServiceAssistant() {
     };
   }, []);
   useEffect(() => {
+    if (
+      loading ||
+      (user?.city &&
+        selectedCity !== canonicalCity(user.city) &&
+        !restored.current)
+    )
+      return;
     if (restored.current) return;
     restored.current = true;
+    // A private prepared request takes precedence over an older guest selection.
+    if (readDraftReference(sessionStorage, user?._id)) {
+      takePublicSelection(sessionStorage, selectedCity);
+      return;
+    }
     try {
-      const saved = JSON.parse(sessionStorage.getItem(resumeKey) || "null");
-      sessionStorage.removeItem(resumeKey);
-      if (
-        saved?.expiresAt > Date.now() &&
-        saved.selection.city === selectedCity
-      ) {
-        turn({ type: "resume" }, { ...empty, ...saved.selection });
+      const selection = takePublicSelection(sessionStorage, selectedCity);
+      if (selection) {
+        turn({ type: "resume" }, { ...empty, ...selection });
         return;
       }
     } catch {
@@ -180,28 +295,35 @@ export function ServiceAssistant() {
     }
     const id = params.get("provider"),
       category = params.get("service");
-    if (id && category)
+    if (id && category) {
+      const serial = generation.current.begin();
       api(`/providers/${encodeURIComponent(id)}`)
-        .then((p) =>
-          turn({ type: "resume" }, { ...empty, category, city: selectedCity }),
-        )
-        .catch((e) => setError(e.message));
-  }, []);
+        .then(() => {
+          if (generation.current.valid(serial))
+            turn(
+              { type: "resume" },
+              { ...empty, category, city: selectedCity },
+            );
+        })
+        .catch((e) => {
+          if (generation.current.valid(serial)) setError(e.message);
+        });
+    }
+  }, [loading, selectedCity, user?._id]);
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, busy]);
   const signIn = () => {
-    const { problem, ...selection } = state;
-    try {
-      sessionStorage.setItem(
-        resumeKey,
-        JSON.stringify({ selection, expiresAt: Date.now() + 20 * 60000 }),
-      );
-    } catch {}
+    savePublicSelection(sessionStorage, state);
     navigate("/login", { state: { from: "/assistant" } });
   };
   const update = (key, value) => turn({ type: "preferences", [key]: value });
-  const blocked = busy || bookingBusy;
+  const blocked =
+    busy ||
+    bookingBusy ||
+    pendingRequest ||
+    Boolean(recovered) ||
+    resumeRetryAvailable;
   if (
     discoveryState({
       loading: discoveryLoading,
@@ -243,12 +365,114 @@ export function ServiceAssistant() {
             </strong>
             <small>
               {options.aiAvailable
-                ? "English, Hindi, Gujarati and mixed-language descriptions through the configured model."
-                : "Common English service rules. Multilingual AI requires server setup."}
+                ? "Guided multilingual phrases, with optional keyword-based AI matching."
+                : "Tested English, Hindi, Gujarati and romanized service phrases. No AI account needed."}
             </small>
           </div>
         </div>
       </section>
+      <div className="container">
+        <FacultyDemoToggle />
+      </div>
+      {resumeRetryAvailable && (
+        <section className="container" role="alert">
+          <p>
+            A saved request could not be checked. Retry before preparing another
+            request.
+          </p>
+          <button
+            className="btn light"
+            disabled={busy || bookingBusy}
+            onClick={() => setRecoveryRetry((v) => v + 1)}
+          >
+            Retry saved request
+          </button>
+        </section>
+      )}
+      {recovered && user?.role === "customer" && (
+        <section
+          className="container gs-assistant__resume"
+          aria-label="Saved request"
+        >
+          <h2>
+            {recovered.booking
+              ? "Your saved booking"
+              : "Resume your prepared request"}
+          </h2>
+          <AssistantBooking
+            key={"resume:" + user._id}
+            customerId={user._id}
+            resume={recovered}
+            onUncertain={setPendingRequest}
+            provider={
+              recovered.draft?.provider || recovered.booking?.provider || {}
+            }
+            category={recovered.draft?.category || {}}
+            state={{ ...empty, city: recovered.draft?.city || selectedCity }}
+            onBusy={setBookingBusy}
+            onProgress={setProgress}
+            onDetails={() => {}}
+            onEditResume={() => {
+              setBookingDetails(
+                recovered.draft
+                  ? {
+                      address: recovered.draft.address,
+                      notes: recovered.draft.notes,
+                      owner: user._id,
+                      city: recovered.draft.city,
+                      area: recovered.draft.provider.area,
+                      category: recovered.draft.category.slug,
+                      problem: "",
+                    }
+                  : null,
+              );
+              setRecovered(null);
+              setPendingRequest(false);
+              setBookingBusy(false);
+            }}
+            onRefresh={() =>
+              setError(
+                "Use Edit details to choose current options. Retry an uncertain confirmation using the same request.",
+              )
+            }
+          />
+          {!pendingRequest && (
+            <button
+              className="btn light"
+              type="button"
+              disabled={bookingBusy}
+              onClick={async () => {
+                if (lock.current) return;
+                lock.current = true;
+                setBookingBusy(true);
+                try {
+                  const ref = readDraftReference(sessionStorage, user._id);
+                  if (ref && !recovered.booking)
+                    await api("/assistant/drafts/" + ref.id, {
+                      method: "DELETE",
+                    });
+                  clearDraftReference(sessionStorage, ref?.id);
+                  setRecovered(null);
+                  setPendingRequest(false);
+                  setError("");
+                } catch {
+                  setError(
+                    "The saved request could not be cancelled. Retry or open My bookings to check its status.",
+                  );
+                } finally {
+                  lock.current = false;
+                  setBookingBusy(false);
+                }
+              }}
+            >
+              {recovered.booking
+                ? "Start a separate request"
+                : "Cancel this draft"}
+            </button>
+          )}
+        </section>
+      )}
+
       <div className="container gs-assistant__layout">
         <section
           className="gs-assistant__conversation"
@@ -264,7 +488,21 @@ export function ServiceAssistant() {
               type="button"
               aria-label="Start a new conversation"
               disabled={blocked}
-              onClick={() => {
+              onClick={async () => {
+                const ref = readDraftReference(sessionStorage, user?._id);
+                if (ref) {
+                  try {
+                    await api("/assistant/drafts/" + ref.id, {
+                      method: "DELETE",
+                    });
+                    clearDraftReference(sessionStorage, ref.id);
+                  } catch {
+                    setError(
+                      "The prepared request could not be cancelled. Try again.",
+                    );
+                    return;
+                  }
+                }
                 setState({ ...empty, city: selectedCity });
                 setResult(null);
                 setMessages([]);
@@ -408,14 +646,21 @@ export function ServiceAssistant() {
                         />
                       </div>
                       <h3>{p.name}</h3>
+                      {p.facultyDemo && (
+                        <p role="status">
+                          <strong>{p.facultyDemoLabel}</strong>
+                        </p>
+                      )}
                       <p>
                         <MapPin size={13} /> {p.area}, {p.city} ·{" "}
                         {result.category.name}
                       </p>
                       <p>
-                        {p.reviews
-                          ? `${p.rating}/5 from ${p.reviews} reviews`
-                          : "No reviews yet"}
+                        {p.facultyDemo
+                          ? "Display only — no bookings or payments"
+                          : p.reviews
+                            ? `${p.rating}/5 from ${p.reviews} reviews`
+                            : "No reviews yet"}
                       </p>
                       <ul>
                         {p.reasons?.map((r) => (
@@ -427,13 +672,21 @@ export function ServiceAssistant() {
                       </ul>
                       <div>
                         <span>
-                          <small>Starting visit estimate</small>
+                          <small>
+                            {p.facultyDemo
+                              ? "Illustrative rate"
+                              : "Starting visit estimate"}
+                          </small>
                           <strong>{money(p.price)}</strong>
                         </span>
                         <button
                           className="btn small"
                           type="button"
-                          disabled={blocked || result.bookingEnabled === false}
+                          disabled={
+                            p.facultyDemo ||
+                            blocked ||
+                            result.bookingEnabled === false
+                          }
                           onClick={() =>
                             turn({ type: "provider", value: String(p._id) })
                           }
@@ -441,7 +694,9 @@ export function ServiceAssistant() {
                           Choose professional
                         </button>
                       </div>
-                      <Link to={`/providers/${p._id}`}>
+                      <Link
+                        to={`/providers/${p._id}${p.facultyDemo ? "?facultyDemo=1" : ""}`}
+                      >
                         View profile & work photographs
                       </Link>
                     </article>
@@ -451,7 +706,9 @@ export function ServiceAssistant() {
               {state.category &&
                 state.city &&
                 state.date &&
-                !result?.providers?.length &&
+                result &&
+                !error &&
+                !result.providers?.length &&
                 !busy && (
                   <div className="gs-assistant__empty">
                     <p>
@@ -527,6 +784,8 @@ export function ServiceAssistant() {
                     ) : (
                       <AssistantBooking
                         key={`${user._id}:${selected._id}:${state.category}:${state.date}:${state.time}`}
+                        disabled={busy}
+                        onUncertain={setPendingRequest}
                         customerId={user._id}
                         provider={selected}
                         category={result.category}
@@ -609,9 +868,9 @@ export function ServiceAssistant() {
                   onChange={(e) => setUseAI(e.target.checked)}
                 />
                 <span>
-                  Send my problem description and enabled service names to
-                  OpenAI for language understanding. Address and booking details
-                  stay separate. Optional.
+                  Send fixed service keywords and enabled service names to
+                  OpenAI. Raw messages, addresses, codes and booking details
+                  stay out. Optional.
                 </span>
               </label>
             )}
@@ -742,8 +1001,9 @@ export function ServiceAssistant() {
         <ShieldCheck size={17} />
         <p>
           Only your explicit confirmation sends a PENDING request. The
-          professional must accept. No payment is started here; the visit-start
-          OTP still applies.
+          professional must accept, then the required deposit and visit
+          verification precede work. Approve the final bill and pay its
+          remaining balance online.
         </p>
       </section>
     </div>
@@ -751,6 +1011,10 @@ export function ServiceAssistant() {
 }
 function AssistantBooking({
   customerId,
+  disabled = false,
+  resume,
+  onUncertain = () => {},
+  onEditResume,
   provider,
   category,
   state,
@@ -761,18 +1025,29 @@ function AssistantBooking({
   onDetails,
 }) {
   const [account, setAccount] = useState(null),
-    [stage, setStage] = useState("address"),
-    [address, setAddress] = useState(previous?.address || ""),
-    [notes, setNotes] = useState(
-      (previous?.notes ?? state.problem).slice(0, 1000),
+    [stage, setStage] = useState(resume?.draft ? "review" : "address"),
+    [address, setAddress] = useState(
+      resume?.draft?.address || previous?.address || "",
     ),
-    [prepared, setPrepared] = useState(null),
-    [receipt, setReceipt] = useState(null),
+    [notes, setNotes] = useState(
+      (resume?.draft?.notes ?? previous?.notes ?? state.problem).slice(0, 1000),
+    ),
+    [prepared, setPrepared] = useState(resume?.draft || null),
+    [receipt, setReceipt] = useState(resume?.booking || null),
+    [uncertain, setUncertain] = useState(resume?.pending || false),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [accountLoading, setAccountLoading] = useState(true);
   const lock = useRef(false),
-    storedDraft = useRef(null);
+    storedDraft = useRef(resume?.draft?._id || null),
+    confirming = useRef(false),
+    mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const updateAddress = (value) => {
     setAddress(value);
     onDetails({ address: value, notes });
@@ -815,14 +1090,10 @@ function AssistantBooking({
       });
     return () => {
       active = false;
-      if (storedDraft.current)
-        api(`/assistant/drafts/${storedDraft.current}`, {
-          method: "DELETE",
-        }).catch(() => {});
     };
   }, []);
   async function request(action) {
-    if (lock.current) return;
+    if (lock.current || disabled) return;
     lock.current = true;
     setBusy(true);
     onBusy(true);
@@ -831,15 +1102,26 @@ function AssistantBooking({
       await action();
     } catch (e) {
       setError(e.message);
+      if (confirming.current && (!e.status || e.status >= 500)) {
+        setUncertain(true);
+        onUncertain(true);
+      }
       if (e.status === 409 || e.status === 404) {
+        setUncertain(false);
+        onUncertain(false);
+        clearDraftReference(sessionStorage, storedDraft.current);
         setStage("address");
         setPrepared(null);
         onProgress("Review needs updating");
+        if (onEditResume) onEditResume();
       }
     } finally {
+      confirming.current = false;
       lock.current = false;
-      setBusy(false);
-      onBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+        onBusy(false);
+      }
     }
   }
   const prepare = (e) => {
@@ -859,6 +1141,7 @@ function AssistantBooking({
         },
       });
       storedDraft.current = d._id;
+      saveDraftReference(sessionStorage, customerId, d);
       setPrepared(d);
       setStage("review");
       onProgress("Review booking");
@@ -868,18 +1151,29 @@ function AssistantBooking({
     request(async () => {
       if (prepared)
         await api(`/assistant/drafts/${prepared._id}`, { method: "DELETE" });
+      clearDraftReference(sessionStorage, storedDraft.current);
       storedDraft.current = null;
       setPrepared(null);
+      if (onEditResume) {
+        onEditResume();
+        return;
+      }
       setStage("address");
       onProgress("Address & notes");
     });
   const confirm = () =>
     request(async () => {
+      confirming.current = true;
+      onUncertain(true);
+      saveDraftReference(sessionStorage, customerId, prepared, true);
       const r = await api(`/assistant/drafts/${prepared._id}/confirm`, {
         method: "POST",
         body: { confirm: true },
       });
+      clearDraftReference(sessionStorage, storedDraft.current);
       storedDraft.current = null;
+      setUncertain(false);
+      onUncertain(false);
       setReceipt(r);
       onProgress("Request sent");
     });
@@ -887,10 +1181,16 @@ function AssistantBooking({
     return (
       <div className="gs-assistant__receipt" role="status">
         <CheckCircle2 size={30} />
-        <h3>Your PENDING request has been sent.</h3>
+        <h3>
+          Booking {String(receipt._id).slice(-8).toUpperCase()}:{" "}
+          {receipt.status}
+        </h3>
         <p>
-          {provider.name} still needs to accept your request for{" "}
-          {prettyDate(receipt.date)} at {receipt.time} IST.
+          {receipt.status === "PENDING"
+            ? (receipt.provider?.name || provider.name) +
+              " still needs to accept your request."
+            : "This is the saved server status; open your booking for current next steps."}{" "}
+          Appointment: {prettyDate(receipt.date)} at {receipt.time} IST.
         </p>
         <Link className="btn" to="/dashboard/customer?section=bookings">
           View my booking
@@ -907,11 +1207,21 @@ function AssistantBooking({
             className="text-link"
             type="button"
             disabled={busy || accountLoading}
-            onClick={account ? onRefresh : retryAccount}
+            onClick={account ? (uncertain ? confirm : onRefresh) : retryAccount}
           >
-            {account ? "Refresh options" : "Retry customer session"}
+            {account
+              ? uncertain
+                ? "Retry same confirmation"
+                : "Refresh options"
+              : "Retry customer session"}
           </button>
         </div>
+      )}
+      {uncertain && (
+        <p role="status">
+          Confirmation is uncertain. Retry this same request to retrieve its
+          saved result. Do not prepare another request until it is resolved.
+        </p>
       )}
       {accountLoading ? (
         <p role="status">Loading your private address choices…</p>
@@ -960,6 +1270,15 @@ function AssistantBooking({
               </dd>
             </div>
           </dl>
+          <p>
+            Required deposit after acceptance:{" "}
+            {prepared.paymentPlan
+              ? money(prepared.paymentPlan.depositAmount / 100)
+              : "Review current terms"}
+            . Credited against the approved final total.{" "}
+            {prepared.paymentsEnabled === false &&
+              "Online checkout is currently unavailable; required payment gates still apply."}
+          </p>
           <p className="gs-assistant__review-note">
             This draft expires in 20 minutes and does not hold the slot.
             Additional work/materials need agreement. The professional must
@@ -971,7 +1290,7 @@ function AssistantBooking({
             <button
               className="btn light"
               type="button"
-              disabled={busy}
+              disabled={busy || disabled || uncertain}
               onClick={edit}
             >
               Edit details
@@ -979,7 +1298,7 @@ function AssistantBooking({
             <button
               className="btn"
               type="button"
-              disabled={busy}
+              disabled={busy || disabled || accountLoading || !account}
               onClick={confirm}
             >
               {busy ? "Sending…" : "Confirm & request booking"}
@@ -1017,7 +1336,7 @@ function AssistantBooking({
             maxLength={500}
             required
             value={address}
-            disabled={busy || account?.role !== "customer"}
+            disabled={busy || disabled || account?.role !== "customer"}
             onChange={(e) => updateAddress(e.target.value)}
           />
           <details>
@@ -1036,7 +1355,10 @@ function AssistantBooking({
             className="btn"
             type="submit"
             disabled={
-              busy || account?.role !== "customer" || address.trim().length < 10
+              busy ||
+              disabled ||
+              account?.role !== "customer" ||
+              address.trim().length < 10
             }
           >
             {busy ? "Checking current details…" : "Review booking request"}

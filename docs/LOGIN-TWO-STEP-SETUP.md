@@ -19,6 +19,7 @@ Restart the API from its owning terminal to load the update. For persistent Mong
 ## Classroom demo: on-screen codes, no email
 
 From PowerShell:
+
 ```powershell
 cd C:\workspace\GharSeva-MERN
 npm.cmd run demo
@@ -37,6 +38,7 @@ The second screen labels the displayed code Classroom demo and says no email was
 Use configured persistent MongoDB. Keep the existing URI and JWT_SECRET. Do not seed/reset your existing database. If server/.env is missing, copy server/.env.example once; otherwise edit necessary settings without overwriting existing settings.
 
 Set server-side values:
+
 ```dotenv
 NODE_ENV=development
 MONGODB_URI=your_existing_persistent_mongodb_uri
@@ -74,17 +76,20 @@ Reference: https://render.com/docs/free#outbound-port-blocking
 
 ## Firebase and Apple
 
+Current implementation, readiness checks and operator steps: [SOCIAL-SIGNIN-SETUP-AND-VERIFICATION.md](../SOCIAL-SIGNIN-SETUP-AND-VERIFICATION.md). The supported UI uses deliberate popup sign-in; it does not initiate full-page redirect login.
+
 Configure FIREBASE_PROJECT_ID, FIREBASE_WEB_API_KEY, FIREBASE_AUTH_DOMAIN and either GOOGLE_APPLICATION_CREDENTIALS (private service-account file outside the project), or FIREBASE_CLIENT_EMAIL plus FIREBASE_PRIVATE_KEY in server secrets. Enable AUTH_GOOGLE_ENABLED and/or AUTH_APPLE_ENABLED only when configured.
 
 In Firebase enable the corresponding Authentication providers, register the web app, and authorize localhost and your hosted domain. Newer Firebase projects do not automatically authorize localhost. Complete Google's provider/OAuth consent configuration.
 
-Apple requires Apple Developer Program membership, a primary App ID, Services ID, Team ID, Key ID and signing key configured in Firebase. Set the Apple Return URL to https://YOUR_PROJECT_ID.firebaseapp.com/__/auth/handler (or the configured custom auth domain equivalent). Register your actual SMTP sender/domain for Apple's private relay and satisfy its email authentication requirements. Configure Firebase's sender separately if Firebase sends email. Both @privaterelay.appleid.com and @private.icloud.com relay domains require consent.
+Apple requires Apple Developer Program membership, a primary App ID, Services ID, Team ID, Key ID and signing key configured in Firebase. Set the Apple Return URL to https://YOUR_PROJECT_ID.firebaseapp.com/__/auth/handler (or the configured custom auth domain equivalent). Register your actual selected email transport's sender/domain (Brevo HTTPS on Render Free) for Apple's private relay and satisfy its email authentication requirements. Configure Firebase's sender separately if Firebase sends email. Both @privaterelay.appleid.com and @private.icloud.com relay domains require consent.
 
 Firebase Admin verifies token validity/revocation and enabled provider. The app checks verified email and recent authentication. Linked Firebase UID/provider mappings select accounts; typed emails do not. Stored roles, suspensions and provider approvals apply. Admin external login is refused.
 
 Unknown identities enter existing onboarding to collect actual missing details. No account is auto-merged by matching email. Existing users must complete authentication, then use Account settings -> Sign-in methods & contact proof, confirm their password and choose Link Google/Apple. Apple relay linking requires explicit consent. An identity cannot be moved from another account.
 
 References:
+
 - https://firebase.google.com/docs/auth/web/google-signin
 - https://firebase.google.com/docs/auth/web/apple
 - https://firebase.google.com/docs/auth/admin/verify-id-tokens
@@ -105,4 +110,3 @@ The first suite uses mocked persistence/delivery in process. The second uses rea
 After restarting the API, review customer/customer alias, professional and admin routes at desktop and 360px width; password visibility, OTP paste/autocomplete/focus, resend countdown, expiry, back action and role/booking redirects. Google/Apple display Setup needed until configured.
 
 Current shared-login results and unverified work are recorded in SHARED-LOGIN-UPDATE.md. LOGIN-UPDATE-RESULTS.md records the earlier separate-page milestone. No real email or live Google/Apple authentication was tested in this session.
-

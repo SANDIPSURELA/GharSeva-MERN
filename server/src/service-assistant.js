@@ -1,3 +1,7 @@
+import { paymentPlanSnapshot } from "./billing-domain.js";
+import { ownerImportedDemo } from "./faculty-showcase.js";
+import { paymentOptions } from "./payment-gateway.js";
+import { serviceSignals } from "./assistant-aliases.js";
 import { requireCity, cityFilter, bookingCity } from "./cities.js";
 import { supportedCities } from "../../shared/cities.js";
 import {
@@ -13,6 +17,8 @@ import { auth, optionalAuth, role } from "./auth.js";
 import { fail, text, number, validateSchedule } from "./domain.js";
 import {
   assistantOptions,
+  groundedAIResult,
+  sensitiveAssistantInput,
   validateMessages,
   guidedAnalysis,
   analyseWithAI,
@@ -34,6 +40,59 @@ function preferences(body) {
       body.budget !== undefined && body.budget !== ""
         ? number(body.budget, "Budget", 100, 50000)
         : null,
+  };
+}
+const assistantReceipt = (booking) =>
+  Object.fromEntries(
+    [
+      "_id",
+      "service",
+      "category",
+      "city",
+      "provider",
+      "customer",
+      "date",
+      "time",
+      "status",
+      "price",
+      "paymentPlan",
+      "address",
+      "notes",
+    ]
+      .filter((key) => booking?.[key] !== undefined)
+      .map((key) => [key, booking[key]]),
+  );
+async function draftView(draft) {
+  const provider = await User.findById(draft.provider).select(
+    "name profile.area profile.city",
+  );
+  const category = await Category.findOne({ slug: draft.category }).select(
+    "slug name",
+  );
+  return {
+    _id: draft._id,
+    provider: {
+      _id: draft.provider,
+      name: provider?.name || "Selected professional",
+      area: draft.expectedArea ?? provider?.profile?.area ?? "",
+      city: draft.city,
+      price: draft.expectedPrice,
+    },
+    category: {
+      slug: draft.category,
+      name: category?.name || "Selected service",
+    },
+    city: draft.city,
+    date: draft.date,
+    time: draft.time,
+    address: draft.address,
+    notes: draft.notes,
+    price: draft.expectedPrice,
+    paymentPlan: draft.paymentPlan,
+    expiresAt: draft.expiresAt,
+    paymentsEnabled: paymentOptions().enabled,
+    priceBasis:
+      "Starting estimate. Extra work needs approval; the remaining approved balance is paid online after completion.",
   };
 }
 export function mountAssistant(
@@ -64,17 +123,20 @@ export function mountAssistant(
     limit: 40,
     message: { message: "Too many booking drafts. Please wait a little." },
   });
-  const findMatches = async (category, prefs) => {
+  const findMatches = async (category, prefs, facultyDemo = false) => {
     const cat = await Category.findOne({
       slug: category,
       enabled: true,
     }).lean();
     if (!cat) fail(400, "Choose an available service category.");
     const people = prefs.city
-        ? await publicProviders({
-            ...cityFilter(prefs.city),
-            "profile.available": true,
-          })
+        ? await publicProviders(
+            {
+              ...cityFilter(prefs.city),
+              "profile.available": true,
+            },
+            { facultyDemo },
+          )
         : [],
       controls = await settings();
     const date = prefs.date || indiaDate(1);
@@ -103,11 +165,21 @@ export function mountAssistant(
     let result = guidedAnalysis(messages, categories),
       mode = "guided",
       notice =
-        "Guided rules support common English descriptions and some spelling mistakes. They do not understand languages as well as a configured AI model.";
-    if (body.mode === "ai" && !result.urgent) {
+        "Guided matching uses tested English, Hindi, Gujarati and romanized service phrases. It is not a diagnosis or full language understanding.";
+    if (
+      body.mode === "ai" &&
+      !result.urgent &&
+      !result.unsupported &&
+      categories.length
+    ) {
       if (assistantOptions().aiAvailable) {
         try {
-          result = await aiAnalyse(messages, categories);
+          const signals = serviceSignals(messages);
+          result = groundedAIResult(
+            await aiAnalyse(signals, categories),
+            categories,
+            signals,
+          );
           mode = "ai";
           notice =
             "AI guidance may be mistaken. A professional must confirm the cause and scope.";
@@ -138,9 +210,26 @@ export function mountAssistant(
         .select("slug name description image")
         .limit(100)
         .lean();
-      const people = [];
-      const stateInput = req.body.state || {};
+
+      if (
+        req.body.state !== undefined &&
+        (!req.body.state ||
+          typeof req.body.state !== "object" ||
+          Array.isArray(req.body.state))
+      )
+        fail(400, "Use valid discovery preferences.");
+      const stateInput = { ...(req.body.state || {}) };
       if (!stateInput.city && req.user?.city) stateInput.city = req.user.city;
+      const serviceUnavailable = Boolean(
+        stateInput.category &&
+        !categories.some((c) => c.slug === stateInput.category),
+      );
+      if (serviceUnavailable && req.body.event?.type !== "category") {
+        stateInput.category = "";
+        stateInput.problem = "";
+        stateInput.providerId = "";
+        stateInput.time = "";
+      }
       const turn = await conversationTurn(
         { ...req.body, state: stateInput },
         {
@@ -157,11 +246,20 @@ export function mountAssistant(
         bookingEnabled: controls.bookingEnabled,
       };
       if (state.category && state.city && state.date && !analysis?.urgent)
-        matches = await findMatches(state.category, state);
+        matches = await findMatches(
+          state.category,
+          state,
+          req.body.facultyDemo === true,
+        );
       if (state.providerId) {
         const provider = matches.providers.find(
           (p) => String(p._id) === state.providerId,
         );
+        if (provider?.facultyDemo)
+          fail(
+            409,
+            "Faculty showcase profiles are display-only. Use the isolated classroom sandbox for bookings.",
+          );
         if (!provider) {
           if (req.body.event?.type === "provider")
             fail(
@@ -178,10 +276,23 @@ export function mountAssistant(
         }
       }
       const prompt = nextQuestion(state);
-      if (!state.category && analysis) {
+      if (serviceUnavailable && !state.category) {
+        prompt.question =
+          "The previously selected service is unavailable. Choose an enabled service.";
+        prompt.quickReplies = categories.slice(0, 3).map((c) => c.name);
+      }
+      if (!categories.length) {
+        prompt.question =
+          "No services are currently enabled. Try later or contact support.";
+        prompt.quickReplies = [];
+      } else if (!state.category && analysis) {
         prompt.question =
           analysis.questions?.[0] || "Choose an enabled service below.";
         prompt.quickReplies = analysis.choices || [];
+      }
+      if (analysis?.urgent) {
+        prompt.question = "";
+        prompt.quickReplies = [];
       }
       if (!state.city && state.category)
         prompt.quickReplies = [...supportedCities].sort().slice(0, 6);
@@ -196,11 +307,13 @@ export function mountAssistant(
           : "Booking requests are temporarily paused. You can still discuss the service and try again later.";
         prompt.quickReplies = [
           "Change date",
-          "Show cheaper options",
+          "Clear filters",
           "Change the city",
         ];
       }
       res.json({
+        catalogEmpty: categories.length === 0,
+        serviceUnavailable,
         ...turn,
         ...matches,
         ...prompt,
@@ -251,7 +364,11 @@ export function mountAssistant(
           .lean();
       const analysis = await analyse(messages, req.body, categories);
       const matches = analysis.category
-        ? await findMatches(analysis.category, prefs)
+        ? await findMatches(
+            analysis.category,
+            prefs,
+            req.body.facultyDemo === true,
+          )
         : { category: null, providers: [] };
       res.json({ ...analysis, ...matches });
     },
@@ -261,6 +378,7 @@ export function mountAssistant(
       await findMatches(
         text(req.query.category, "Service category", 1, 70),
         preferences({ ...req.query, city: req.query.city || req.user?.city }),
+        req.query.facultyDemo === "1",
       ),
     ),
   );
@@ -280,6 +398,8 @@ export function mountAssistant(
       });
       if (!provider)
         fail(404, "This professional is not available for booking.");
+      if (ownerImportedDemo(provider))
+        fail(403, "Faculty showcase profiles cannot receive booking drafts.");
       const category = await Category.findOne({
         slug: req.body.category,
         enabled: true,
@@ -315,6 +435,11 @@ export function mountAssistant(
         notes = req.body.notes
           ? text(req.body.notes, "Service notes", 1, 1000)
           : "";
+      if (sensitiveAssistantInput(notes))
+        fail(
+          400,
+          "Keep passwords, codes and payment details out of service notes.",
+        );
       if (safetyConcern(notes))
         fail(
           400,
@@ -330,21 +455,40 @@ export function mountAssistant(
         notes,
         city,
         expectedPrice: provider.profile.price,
+        expectedArea: provider.profile.area,
+        paymentPlan: paymentPlanSnapshot(provider.profile.price),
         expiresAt: new Date(Date.now() + 20 * 60000),
       });
-      res.status(201).json({
-        _id: draft._id,
-        provider: { _id: provider._id, name: provider.name },
-        category: { slug: category.slug, name: category.name },
-        date: draft.date,
-        time: draft.time,
-        address: draft.address,
-        notes: draft.notes,
-        price: draft.expectedPrice,
-        expiresAt: draft.expiresAt,
-        priceBasis:
-          "Starting visit estimate; agree on additional work and materials separately.",
+      res.status(201).json(await draftView(draft));
+    },
+  );
+  app.get(
+    "/api/assistant/drafts/:id",
+    auth,
+    role("customer"),
+    async (req, res) => {
+      const id = oid(req.params.id);
+      const prior = await Booking.findOne({
+        assistantDraft: id,
+        customer: req.user._id,
+      }).select("_id");
+      if (prior)
+        return res.json({
+          booking: assistantReceipt(
+            (await bookingView({ _id: prior._id }, req.user))[0],
+          ),
+        });
+      const draft = await AssistantBookingDraft.findOne({
+        _id: id,
+        customer: req.user._id,
+        expiresAt: { $gt: new Date() },
       });
+      if (!draft)
+        fail(
+          404,
+          "This prepared request expired or is unavailable. Review a new request.",
+        );
+      res.json({ draft: await draftView(draft) });
     },
   );
   app.delete(
@@ -352,6 +496,16 @@ export function mountAssistant(
     auth,
     role("customer"),
     async (req, res) => {
+      if (
+        await Booking.exists({
+          assistantDraft: oid(req.params.id),
+          customer: req.user._id,
+        })
+      )
+        fail(
+          409,
+          "This request already created a booking. Open My bookings for its saved status; cancelling a draft cannot cancel that booking.",
+        );
       await AssistantBookingDraft.deleteOne({
         _id: oid(req.params.id),
         customer: req.user._id,
@@ -376,7 +530,11 @@ export function mountAssistant(
         customer: req.user._id,
       }).select("_id");
       if (prior)
-        return res.json((await bookingView({ _id: prior._id }, req.user))[0]);
+        return res.json(
+          assistantReceipt(
+            (await bookingView({ _id: prior._id }, req.user))[0],
+          ),
+        );
       const draft = await AssistantBookingDraft.findOne({
         _id: id,
         customer: req.user._id,
@@ -387,6 +545,8 @@ export function mountAssistant(
           404,
           "This booking draft expired or is not yours. Prepare a new draft.",
         );
+      if (!draft.paymentPlan)
+        fail(409, "Payment terms need a new review. Prepare a new request.");
       try {
         const booked = await createCustomerBooking(
           req.user,
@@ -400,9 +560,14 @@ export function mountAssistant(
             notes: draft.notes,
             urgency: "STANDARD",
           },
-          { assistantDraft: draft._id, expectedPrice: draft.expectedPrice },
+          {
+            assistantDraft: draft._id,
+            expectedPrice: draft.expectedPrice,
+            expectedPaymentPlan: draft.paymentPlan,
+            expectedArea: draft.expectedArea,
+          },
         );
-        res.status(201).json(booked);
+        res.status(201).json(assistantReceipt(booked));
       } catch (error) {
         if (error.code === 11000) {
           const existing = await Booking.findOne({
@@ -411,7 +576,9 @@ export function mountAssistant(
           }).select("_id");
           if (existing)
             return res.json(
-              (await bookingView({ _id: existing._id }, req.user))[0],
+              assistantReceipt(
+                (await bookingView({ _id: existing._id }, req.user))[0],
+              ),
             );
         }
         throw error;

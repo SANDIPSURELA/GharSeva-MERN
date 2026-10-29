@@ -1,4 +1,5 @@
 import { Payments } from "./Payments";
+import { FacultyShowcaseAdmin } from "./FacultyShowcaseAdmin";
 import { AccountInvitations } from "./AccountInvitations";
 import {
   ProviderIdentityVerification,
@@ -77,6 +78,7 @@ const navigation = {
     ["documents", "Photos & documents", FileText],
   ],
   admin: [
+    ["faculty-showcase", "Faculty Demo Showcase", ShieldCheck],
     ["applications", "Registration requests", ClipboardList],
     ["invitations", "Create accounts", Users],
     ["verification", "Identity reviews", ShieldCheck],
@@ -688,16 +690,22 @@ export function Dashboard() {
             {section === "applications" && user.role === "admin" && (
               <Applications />
             )}
-            {user.role === "admin" && admin && section !== "applications" && (
-              <AdminContent
-                section={section}
-                data={admin}
-                busy={busy}
-                act={act}
-                search={search}
-                setSearch={setSearch}
-              />
+            {user.role === "admin" && section === "faculty-showcase" && (
+              <FacultyShowcaseAdmin />
             )}
+            {user.role === "admin" &&
+              admin &&
+              section !== "applications" &&
+              section !== "faculty-showcase" && (
+                <AdminContent
+                  section={section}
+                  data={admin}
+                  busy={busy}
+                  act={act}
+                  search={search}
+                  setSearch={setSearch}
+                />
+              )}
           </>
         )}
       </div>

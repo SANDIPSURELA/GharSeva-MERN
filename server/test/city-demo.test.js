@@ -8,6 +8,14 @@ import { randomBytes } from "node:crypto";
 import { createApp } from "../src/app.js";
 import * as models from "../src/models.js";
 import { expandDemo } from "../src/demo-expansion.js";
+import bcrypt from "bcryptjs";
+import {
+  demoDefinitions as ownerDefinitions,
+  stableId,
+} from "../src/owner-demo-providers.js";
+import { canonicalCatalog } from "../src/canonical-catalog.js";
+import { facultyConfirmation } from "../src/faculty-showcase.js";
+import { paymentPlanSnapshot } from "../src/billing-domain.js";
 import { demoProviders } from "../../seed-data/demo-accounts.js";
 import {
   accountRows,
@@ -106,8 +114,15 @@ function update(doc, u, insert = false) {
     doc.set(k, (value(doc, k) || 0) + v);
   for (const [k, v] of Object.entries(u.$push || {})) {
     const a = value(doc, k) || [];
-    a.push(v);
-    doc.set(k, a);
+    a.push(...(v.$each || [v]));
+    doc.set(
+      k,
+      v.$slice === undefined
+        ? a
+        : v.$slice < 0
+          ? a.slice(v.$slice)
+          : a.slice(0, v.$slice),
+    );
   }
   for (const [k, v] of Object.entries(u.$max || {}))
     if (value(doc, k) == null || value(doc, k) < v) doc.set(k, v);
@@ -345,6 +360,10 @@ test("expansion dry-run makes no writes and apply creates the full catalogue wit
   assert.equal(await User.countDocuments(), 35);
   assert.equal(JSON.stringify(plain(realCustomer)), before);
   assert.equal(await User.countDocuments({ role: "provider" }), 32);
+  const fictionalProviders = await User.find({ role: "provider" });
+  assert.ok(fictionalProviders.every((p) => p.profile.experience === 0));
+  assert.ok(fictionalProviders.every((p) => !p.profile.documents?.length));
+  assert.equal(tables.get(File).length, 0);
   assert.equal(await Booking.countDocuments(), 0);
   for (const c of await Category.find({ enabled: true }))
     assert.equal(
@@ -949,6 +968,339 @@ test("fresh reserved-address expansion creates a private ignored guide only for 
       snapshot,
     );
   } finally {
+    for (const [model, rows] of tables) {
+      rows.length = 0;
+      rows.push(...prior.get(model));
+    }
+  }
+});
+
+test("faculty showcase routes preserve approvals, require admin confirmation and cannot create bookings/payments", async () => {
+  const prior = new Map([...tables].map(([m, rows]) => [m, [...rows]])),
+    previousDatabase = mongoose.connection.name;
+  const previousMode = process.env.PAYMENTS_MODE;
+  try {
+    mongoose.connection.name = "gharseva_faculty_test";
+    for (const rows of tables.values()) rows.length = 0;
+    process.env.PAYMENTS_MODE = "demo";
+    const hash = await bcrypt.hash("ShowcaseFixture7!", 4);
+    const admin = new User({
+      name: "Fixture admin",
+      email: "showcase-admin@example.test",
+      mobile: "9000000001",
+      role: "admin",
+      passwordHash: hash,
+      city: "Ahmedabad",
+    });
+    const customer = new User({
+      name: "Fixture customer",
+      email: "showcase-customer@example.test",
+      mobile: "9000000002",
+      role: "customer",
+      passwordHash: hash,
+      city: "Ahmedabad",
+    });
+    const imported = ownerDefinitions.map(
+      (p) =>
+        new User({
+          _id: stableId(mongoose.connection.name, p.id),
+          demoAccountId: "owner-demo:" + p.id,
+          name: "DEMO / Fictional professional: " + p.name,
+          email: p.id + "@example.test",
+          mobile: p.mobile,
+          passwordHash: hash,
+          role: "provider",
+          city: "Ahmedabad",
+          profile: {
+            demoProviderId: p.id,
+            category: p.serviceId,
+            categories: [p.serviceId],
+            status: "PENDING",
+            identityRequired: true,
+            city: "Ahmedabad",
+            area: p.location,
+            price: p.price,
+            available: true,
+            documents: [],
+            portfolio: [],
+          },
+        }),
+    );
+    const approved = new User({
+      name: "Real approved fixture",
+      email: "approved@example.test",
+      mobile: "9000000003",
+      passwordHash: hash,
+      role: "provider",
+      city: "Ahmedabad",
+      profile: {
+        category: "plumbing",
+        categories: ["plumbing"],
+        city: "Ahmedabad",
+        area: "Test area",
+        status: "APPROVED",
+        available: true,
+      },
+    });
+    const pending = new User({
+      name: "Real pending fixture",
+      email: "pending@example.test",
+      mobile: "9000000004",
+      passwordHash: hash,
+      role: "provider",
+      city: "Ahmedabad",
+      profile: {
+        category: "plumbing",
+        city: "Ahmedabad",
+        status: "PENDING",
+        available: true,
+      },
+    });
+    tables.get(User).push(admin, customer, approved, pending, ...imported);
+    tables.get(Category).push(...canonicalCatalog.map((c) => new Category(c)));
+    const controls = new models.Settings({
+      key: "main",
+      facultyDemoEnabled: false,
+    });
+    tables.get(models.Settings).push(controls);
+    const baseline = JSON.stringify(tables.get(User).map(plain));
+    const owner = await login(customer.email, "ShowcaseFixture7!");
+    const root = await login(admin.email, "ShowcaseFixture7!");
+    assert.equal((await call("/admin/faculty-showcase")).status, 401);
+    assert.equal((await call("/admin/faculty-showcase", owner)).status, 403);
+    assert.equal(
+      (
+        await call("/admin/faculty-showcase", {
+          ...owner,
+          body: { enabled: true },
+        })
+      ).status,
+      403,
+    );
+    const preview = (await call("/admin/faculty-showcase?enabled=1", root))
+      .data;
+    assert.equal(preview.eligibleCount, 20);
+    assert.equal(preview.canEnable, true);
+    assert.ok(Object.values(preview.categoryCounts).every((n) => n === 2));
+    assert.equal(controls.facultyDemoEnabled, false);
+    assert.equal(
+      (await call("/providers?city=Ahmedabad&facultyDemo=1")).data.length,
+      1,
+    );
+    const payload = {
+      enabled: true,
+      revision: preview.revision,
+      fingerprint: preview.fingerprint,
+      confirmation: facultyConfirmation(true),
+    };
+    assert.equal(
+      (
+        await call("/admin/faculty-showcase", {
+          ...root,
+          body: { ...payload, confirmation: "yes" },
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await call("/admin/faculty-showcase", {
+          ...root,
+          body: { ...payload, revision: 99 },
+        })
+      ).status,
+      409,
+    );
+    imported[0].profile.identityRequired = false;
+    assert.equal(
+      (await call("/admin/faculty-showcase", { ...root, body: payload }))
+        .status,
+      409,
+    );
+    imported[0].profile.identityRequired = true;
+    assert.equal(
+      (await call("/admin/faculty-showcase", { ...root, body: payload }))
+        .status,
+      200,
+    );
+    assert.equal(controls.facultyDemoAudit.length, 1);
+    assert.equal(
+      (await call("/admin/faculty-showcase", { ...root, body: payload })).data
+        .unchanged,
+      true,
+    );
+    assert.equal(controls.facultyDemoAudit.length, 1);
+    const listings = (
+      await call("/providers?city=%20Ahemdabad%20&facultyDemo=1")
+    ).data;
+    assert.equal(listings.length, 21);
+    assert.equal(listings.filter((p) => p.facultyDemo).length, 20);
+    assert.equal((await call("/providers?city=Ahmedabad")).data.length, 1);
+    assert.equal(
+      (await call("/providers?city=Pune&facultyDemo=1")).data.length,
+      0,
+    );
+    const plumbing = (
+      await call("/providers?city=Ahmedabad&category=plumbing&facultyDemo=1")
+    ).data;
+    assert.equal(plumbing.filter((p) => p.facultyDemo).length, 2);
+    for (const p of listings.filter((p) => p.facultyDemo)) {
+      assert.equal(
+        p.facultyDemoLabel,
+        "DEMO PROFILE — Fictional, not identity verified",
+      );
+      assert.equal(p.bookingAllowed, false);
+      assert.equal(p.rating, 0);
+      assert.equal(p.completed, 0);
+      for (const key of [
+        "email",
+        "mobile",
+        "passwordHash",
+        "documents",
+        "identityRequired",
+        "status",
+      ])
+        assert.equal(p[key], undefined);
+    }
+    const demo = imported[0];
+    assert.equal((await call("/providers/" + demo._id)).status, 404);
+    const detail = await call("/providers/" + demo._id + "?facultyDemo=1");
+    assert.equal(detail.status, 200);
+    assert.deepEqual(detail.data.feedback, []);
+    assert.equal(
+      (await call("/providers/" + demo._id + "/slots?date=" + indiaDate(2)))
+        .status,
+      404,
+    );
+    const matches = await call(
+      "/assistant/matches?city=Ahmedabad&category=plumbing&facultyDemo=1",
+    );
+    assert.equal(matches.status, 200);
+    assert.equal(matches.data.providers.filter((p) => p.facultyDemo).length, 2);
+    const request = {
+      providerId: String(demo._id),
+      category: "plumbing",
+      city: "Ahmedabad",
+      date: indiaDate(2),
+      time: "09:00",
+      address: "Fictional test service address",
+    };
+    assert.equal(
+      (await call("/bookings", { ...owner, body: request })).status,
+      404,
+    );
+    // Even a mistaken out-of-band approval cannot turn an imported showcase into a real booking target.
+    demo.profile.status = "APPROVED";
+    assert.equal(
+      (await call("/bookings", { ...owner, body: request })).status,
+      403,
+    );
+    assert.equal(
+      (await call("/assistant/drafts", { ...owner, body: request })).status,
+      403,
+    );
+    const b = new Booking({
+      customer: customer._id,
+      provider: demo._id,
+      category: "plumbing",
+      service: "Plumbing",
+      status: "ACCEPTED",
+      city: "Ahmedabad",
+      date: indiaDate(2),
+      time: "09:00",
+      address: request.address,
+      price: 299,
+      paymentPlan: paymentPlanSnapshot(299),
+    });
+    tables.get(Booking).push(b);
+    assert.equal(
+      (
+        await call(`/payments/booking/${b._id}/order`, {
+          ...owner,
+          body: { purpose: "VISIT_DEPOSIT", acceptDeposit: true },
+        })
+      ).status,
+      409,
+    );
+    assert.equal(tables.get(models.Payment).length, 0);
+    const pro = await login(demo.email, "ShowcaseFixture7!");
+    assert.equal(
+      (
+        await call(`/bookings/${b._id}/status`, {
+          ...pro,
+          method: "PATCH",
+          body: { status: "ON_THE_WAY" },
+        })
+      ).status,
+      403,
+    );
+    demo.profile.status = "PENDING";
+    const cat = tables.get(Category).find((c) => c.slug === "plumbing");
+    cat.enabled = false;
+    assert.equal(
+      (await call("/providers?city=Ahmedabad&category=plumbing&facultyDemo=1"))
+        .data.length,
+      0,
+    );
+    cat.enabled = true;
+    imported[1].profile.available = false;
+    assert.equal(
+      (await call("/providers?city=Ahmedabad&facultyDemo=1")).data.filter(
+        (p) => p.facultyDemo,
+      ).length,
+      19,
+    );
+    imported[1].profile.available = true;
+    const off = await call("/admin/faculty-showcase?enabled=0", root);
+    const disable = {
+      enabled: false,
+      revision: off.data.revision,
+      confirmation: facultyConfirmation(false),
+    };
+    assert.equal(
+      (await call("/admin/faculty-showcase", { ...root, body: disable }))
+        .status,
+      200,
+    );
+    assert.equal(
+      (await call("/admin/faculty-showcase", { ...root, body: disable })).data
+        .unchanged,
+      true,
+    );
+    assert.equal(controls.facultyDemoAudit.length, 2);
+    assert.equal(
+      (await call("/providers?city=Ahmedabad&facultyDemo=1")).data.length,
+      1,
+    );
+    const adminSession = tables
+      .get(models.AuthSession)
+      .find((s) => String(s.user) === String(admin._id));
+    adminSession.reauthenticatedAt = new Date(0);
+    const stalePreview = (await call("/admin/faculty-showcase?enabled=1", root))
+      .data;
+    assert.equal(
+      (
+        await call("/admin/faculty-showcase", {
+          ...root,
+          body: {
+            enabled: true,
+            revision: stalePreview.revision,
+            fingerprint: stalePreview.fingerprint,
+            confirmation: facultyConfirmation(true),
+          },
+        })
+      ).status,
+      403,
+      "mutations retain recent admin password/OTP proof requirement",
+    );
+    assert.equal(
+      JSON.stringify(tables.get(User).map(plain)),
+      baseline,
+      "all user fields and approvals are preserved",
+    );
+  } finally {
+    mongoose.connection.name = previousDatabase;
+    process.env.PAYMENTS_MODE = previousMode;
     for (const [model, rows] of tables) {
       rows.length = 0;
       rows.push(...prior.get(model));

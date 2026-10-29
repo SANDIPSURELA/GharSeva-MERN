@@ -234,6 +234,7 @@ export function ProviderCard({ provider, showDetails = false }) {
         <WorkPhoto photo={photo} showCaption />
         <button
           className={fav ? "icon-button heart active" : "icon-button heart"}
+          disabled={provider.facultyDemo}
           aria-label={`${fav ? "Remove from" : "Add to"} favourites`}
           onClick={async () => {
             if (!user) {
@@ -257,7 +258,11 @@ export function ProviderCard({ provider, showDetails = false }) {
         </button>
         <span className={`availability ${provider.available ? "" : "busy"}`}>
           <i />
-          {provider.available ? "Accepting bookings" : "Currently unavailable"}
+          {provider.facultyDemo
+            ? "Display only — no bookings"
+            : provider.available
+              ? "Accepting bookings"
+              : "Currently unavailable"}
         </span>
       </div>
       <div className="provider-body">
@@ -265,26 +270,34 @@ export function ProviderCard({ provider, showDetails = false }) {
           <Avatar person={provider} />
           <div>
             <h3>{provider.name}</h3>
-            {provider.demoProviderId && <small>Fictional demo profile</small>}
+            {provider.facultyDemo ? (
+              <small>{provider.facultyDemoLabel}</small>
+            ) : (
+              provider.demoProviderId && <small>Fictional demo profile</small>
+            )}
             <p>
               {provider.categoryNames?.join(" · ") || provider.categoryName}
             </p>
           </div>
-          <ShieldCheck
-            className="teal"
-            size={20}
-            role="img"
-            aria-label={
-              provider.demoProviderId
-                ? "Approved classroom fixture, not a verified real-world professional"
-                : "Profile reviewed by administrator"
-            }
-          />
+          {!provider.facultyDemo && (
+            <ShieldCheck
+              className="teal"
+              size={20}
+              role="img"
+              aria-label={
+                provider.demoProviderId
+                  ? "Approved classroom fixture, not a verified real-world professional"
+                  : "Profile reviewed by administrator"
+              }
+            />
+          )}
         </div>
-        <div className="provider-rating">
-          <Stars rating={provider.rating} count={provider.reviews} />
-          <span>{provider.experience} years exp.</span>
-        </div>
+        {!provider.facultyDemo && (
+          <div className="provider-rating">
+            <Stars rating={provider.rating} count={provider.reviews} />
+            <span>{provider.experience} years exp.</span>
+          </div>
+        )}
         <p className="location">
           <MapPin size={14} />
           {provider.area}
@@ -300,17 +313,21 @@ export function ProviderCard({ provider, showDetails = false }) {
                 <span key={skill}>{skill}</span>
               ))}
             </div>
-            <p className="provider-platform-history">
-              <Check size={13} />
-              {provider.completed
-                ? `${provider.completed} completed ${provider.completed === 1 ? "service" : "services"} on GharSeva`
-                : "No completed services on GharSeva yet"}
-            </p>
+            {!provider.facultyDemo && (
+              <p className="provider-platform-history">
+                <Check size={13} />
+                {provider.completed
+                  ? `${provider.completed} completed ${provider.completed === 1 ? "service" : "services"} on GharSeva`
+                  : "No completed services on GharSeva yet"}
+              </p>
+            )}
           </div>
         )}
         <div className="provider-price">
           <div>
-            <small>Starting from</small>
+            <small>
+              {provider.facultyDemo ? "Illustrative rate" : "Starting from"}
+            </small>
             <strong>
               {money(provider.price)}
               <span>/ visit</span>
@@ -318,13 +335,14 @@ export function ProviderCard({ provider, showDetails = false }) {
           </div>
           <Link
             className="btn small light"
-            to={`/providers/${provider._id}`}
+            to={`/providers/${provider._id}${provider.facultyDemo ? "?facultyDemo=1" : ""}`}
             aria-label={`View ${provider.name}'s profile`}
           >
             View profile <ArrowRight size={14} />
           </Link>
         </div>
         <button
+          disabled={provider.facultyDemo}
           className={
             comparison.includes(provider._id)
               ? "compare-button selected"

@@ -144,3 +144,78 @@ test("redirect recovery errors clean up and cannot be mistaken for a verified ap
   );
   assert.deepEqual(f.events, ["MEMORY", "signout"]);
 });
+
+test("explicit logout cancels a pending popup before an application exchange", async () => {
+  const { clearExternalIdentity } =
+    await import("../../shared/external-auth.js");
+  const f = fixture(),
+    modules = await f.loader();
+  let complete;
+  modules[1].signInWithPopup = () =>
+    new Promise((resolve) => {
+      complete = resolve;
+    });
+  const promise = externalToken(options, "google", async () => modules);
+  while (!complete) await new Promise((resolve) => setImmediate(resolve));
+  await clearExternalIdentity();
+  complete({ user: { getIdToken: async () => "must-not-exchange" } });
+  await assert.rejects(() => promise, /session changed/);
+});
+test("duplicate requests cannot launch simultaneous provider popups", async () => {
+  const f = fixture(),
+    modules = await f.loader();
+  let complete,
+    calls = 0;
+  modules[1].signInWithPopup = () => {
+    calls++;
+    return new Promise((resolve) => {
+      complete = resolve;
+    });
+  };
+  const first = externalToken(options, "google", async () => modules);
+  while (!complete) await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(
+    () => externalToken(options, "apple", async () => modules),
+    /already in progress/,
+  );
+  complete({ user: { getIdToken: async () => "fixture" } });
+  assert.equal(await first, "fixture");
+  assert.equal(calls, 1);
+});
+test("preparation never signs in; a stale application session prevents any exchange", async () => {
+  const { prepareExternalAuth, exchangeExternalIdentity } =
+    await import("../../shared/external-auth.js");
+  const f = fixture();
+  await prepareExternalAuth(options, f.loader);
+  assert.deepEqual(f.events, ["MEMORY"]);
+  let requested = 0;
+  await assert.rejects(
+    () =>
+      exchangeExternalIdentity({
+        options,
+        provider: "google",
+        request: async () => {
+          requested++;
+        },
+        token: async () => "fixture",
+        active: () => false,
+      }),
+    /session changed/,
+  );
+  assert.equal(requested, 0);
+  const result = await exchangeExternalIdentity({
+    options,
+    provider: "apple",
+    details: { action: "login", idToken: "forged", provider: "google" },
+    token: async () => "verified-boundary-fixture",
+    request: async (path, request) => ({ path, body: request.body }),
+  });
+  assert.deepEqual(result, {
+    path: "/auth/external",
+    body: {
+      action: "login",
+      idToken: "verified-boundary-fixture",
+      provider: "apple",
+    },
+  });
+});

@@ -1,7 +1,6 @@
 import { inspectCatalog } from "./catalog-reconciliation.js";
 import bcrypt from "bcryptjs";
-import { readFileSync } from "node:fs";
-import { User, Category, File } from "./models.js";
+import { User, Category } from "./models.js";
 import { demoImageFor } from "../../seed-data/demo-work-images.js";
 import { canonicalCatalog } from "./canonical-catalog.js";
 import { demoDefinitions } from "../../scripts/local-demo-guide.js";
@@ -146,7 +145,7 @@ export async function expandDemo({
               bio:
                 p.bio +
                 " Sample professional profile for the college demonstration.",
-              experience: p.experience,
+              experience: 0,
               price: p.price,
               status: "APPROVED",
               available: true,
@@ -159,34 +158,13 @@ export async function expandDemo({
           }
         : {}),
     });
-    // Only new fictional accounts receive a clearly fictional private supporting PDF.
-    if (p.role === "provider") {
-      const file = new File({
-        owner: u._id,
-        kind: "document",
-        name: "DEMO-DOCUMENT.pdf",
-        mime: "application/pdf",
-        data: readFileSync(
-          new URL("../fixtures/demo-document.pdf", import.meta.url),
-        ),
-      });
-      u.profile.documents = [file._id];
-      try {
-        await u.save();
-        await file.save();
-        entry.created = true;
-      } catch (e) {
-        if (e.code !== 11000) throw e;
-        report.push({ action: "CONCURRENT ACCOUNT PRESERVED", id: p.id });
-      }
-    } else {
-      try {
-        await u.save();
-        entry.created = true;
-      } catch (e) {
-        if (e.code !== 11000) throw e;
-        report.push({ action: "CONCURRENT ACCOUNT PRESERVED", id: p.id });
-      }
+    // Classroom fixtures are approved only in demo mode, without invented identity evidence.
+    try {
+      await u.save();
+      entry.created = true;
+    } catch (e) {
+      if (e.code !== 11000) throw e;
+      report.push({ action: "CONCURRENT ACCOUNT PRESERVED", id: p.id });
     }
   }
   return report;

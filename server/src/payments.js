@@ -1,4 +1,5 @@
 import express from "express";
+import { ownerImportedDemo } from "./faculty-showcase.js";
 import { createHash, randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { rateLimit } from "express-rate-limit";
@@ -53,7 +54,7 @@ function currentMode(p) {
 export async function bookingFor(id, user) {
   const b = await Booking.findOne({ _id: oid(id), ...scope(user) })
     .populate("customer", "name")
-    .populate("provider", "name status profile.status")
+    .populate("provider", "name status profile.status demoAccountId")
     .lean();
   if (!b) fail(404, "Booking not found.");
   return b;
@@ -745,6 +746,7 @@ export function mountPayments(app, { gateway = razorpayGateway() } = {}) {
         );
       if (
         b.provider?.status !== "ACTIVE" ||
+        (b.provider && ownerImportedDemo(b.provider)) ||
         b.provider?.profile?.status !== "APPROVED"
       )
         fail(

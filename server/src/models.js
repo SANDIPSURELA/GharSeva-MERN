@@ -215,6 +215,17 @@ export const Settings = mongoose.model(
   new Schema(
     {
       key: { type: String, unique: true, default: "main" },
+      facultyDemoEnabled: { type: Boolean, default: false },
+      facultyDemoRevision: { type: Number, default: 0 },
+      facultyDemoAudit: [
+        {
+          enabled: Boolean,
+          at: Date,
+          actor: ref("User"),
+          revision: Number,
+          _id: false,
+        },
+      ],
       bookingEnabled: { type: Boolean, default: true },
       providerRegistration: { type: Boolean, default: true },
       commission: { type: Number, min: 0, max: 30, default: 10 },
@@ -343,6 +354,9 @@ export const ExternalIdentity = mongoose.model(
         enum: ["google.com", "apple.com"],
         required: true,
       },
+      additionalProviders: [
+        { type: String, enum: ["google.com", "apple.com"] },
+      ],
       user: { ...ref("User"), required: true },
     },
     options,
@@ -414,6 +428,8 @@ const assistantDraftSchema = new Schema(
     notes: { type: String, maxLength: 1000 },
     city: String,
     expectedPrice: { type: Number, required: true },
+    expectedArea: String,
+    paymentPlan: { type: Schema.Types.Mixed },
     expiresAt: { type: Date, required: true },
   },
   options,

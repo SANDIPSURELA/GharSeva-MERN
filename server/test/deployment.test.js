@@ -8,7 +8,10 @@ import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
+import {
+  createIsolatedMongo,
+  connectIsolatedMongo,
+} from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import { User, Category, Booking } from "../src/models.js";
 import { bootstrapProduction } from "../src/bootstrap.js";
@@ -80,7 +83,6 @@ test("production validation rejects unsafe settings without printing their value
     { PAYMENTS_MODE: "demo" },
     { PAYMENTS_MODE: "live" },
     { PAYMENTS_MODE: "razorpay_test", RAZORPAY_KEY_ID: "rzp_live_secret" },
-    { AUTH_GOOGLE_ENABLED: "true" },
     { ASSISTANT_AI_ENABLED: "true" },
     { PORT: "0" },
   ]) {
@@ -91,6 +93,22 @@ test("production validation rejects unsafe settings without printing their value
     assert.ok(report.errors.length, JSON.stringify(Object.keys(override)));
     assert.ok(!report.errors.join(" ").includes("rzp_live_secret"));
   }
+  const optionalSocial = inspectEnvironment(
+    { ...production, AUTH_GOOGLE_ENABLED: "true" },
+    { requireBuild: false },
+  );
+  assert.deepEqual(optionalSocial.errors, []);
+  assert.ok(
+    optionalSocial.warnings.some((message) =>
+      message.includes("social sign-in"),
+    ),
+  );
+  assert.ok(
+    inspectEnvironment(
+      { ...production, FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099" },
+      { requireBuild: false },
+    ).errors.length,
+  );
   assert.ok(
     inspectEnvironment(production, { dist: "/no-such-build" }).errors.some(
       (e) => e.includes("build"),

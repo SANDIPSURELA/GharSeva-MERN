@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   ArrowRight,
   ArrowLeft,
@@ -38,6 +43,7 @@ const shortDate = (date, options) =>
 
 export function ProviderDetails() {
   const { id } = useParams();
+  const [params] = useSearchParams();
   const {
     user,
     setUser,
@@ -46,7 +52,9 @@ export function ProviderDetails() {
     toggleCompare,
     categories,
     config,
+    facultyDemo,
   } = useApp();
+  const showDemo = facultyDemo || params.get("facultyDemo") === "1";
   const navigate = useNavigate();
   const [profile, setProfile] = useState({ id: "", data: null, error: "" });
   const [retry, setRetry] = useState(0);
@@ -77,6 +85,7 @@ export function ProviderDetails() {
     date <= indiaDateAfter(90);
   const canRequest = Boolean(
     p?.available &&
+    !p?.facultyDemo &&
     config.bookingEnabled &&
     (!user || user.role === "customer"),
   );
@@ -90,7 +99,7 @@ export function ProviderDetails() {
     setReviewRating("");
     setReviewSort("newest");
     setPhotoIndex(-1);
-    api(`/providers/${id}`)
+    api(`/providers/${id}${showDemo ? "?facultyDemo=1" : ""}`)
       .then((data) => {
         if (active) setProfile({ id, data, error: "" });
       })
@@ -100,12 +109,17 @@ export function ProviderDetails() {
     return () => {
       active = false;
     };
-  }, [id, retry]);
+  }, [id, retry, showDemo]);
 
   useEffect(() => {
     let active = true;
     setSelected("");
-    if (!p?.available || !validDate || !config.bookingEnabled) {
+    if (
+      !p?.available ||
+      p.facultyDemo ||
+      !validDate ||
+      !config.bookingEnabled
+    ) {
       setAvailability({ key: slotKey, slots: [], error: "", loading: false });
       return;
     }
@@ -170,6 +184,37 @@ export function ProviderDetails() {
       </section>
     );
   if (!p) return <Loading />;
+  if (p.facultyDemo)
+    return (
+      <section className="section provider-profile">
+        <div className="container card" style={{ padding: "2rem" }}>
+          <p role="status">
+            <strong>{p.facultyDemoLabel}</strong>
+          </p>
+          <h1>{p.name}</h1>
+          <p>
+            {p.categoryName} · {p.area}, {p.city}
+          </p>
+          <p>{p.bio}</p>
+          <p>
+            Illustrative rate: {money(p.price)}. No booking, payment, reviews or
+            verified work history is offered for this profile.
+          </p>
+          <div className="grid">
+            {resolveWorkImages(p).map((photo) => (
+              <WorkPhoto key={photo.src} photo={photo} showCaption />
+            ))}
+          </div>
+          <p>
+            For a booking demonstration, use the separate classroom sandbox and
+            explicitly simulated or TEST payments.
+          </p>
+          <Link className="btn light" to="/services">
+            Back to services
+          </Link>
+        </div>
+      </section>
+    );
 
   const category = categories.find((c) => c.slug === p.category);
   const feedback = p.feedback || [];
