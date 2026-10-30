@@ -20,7 +20,9 @@ const cash = (n) =>
     maximumFractionDigits: 2,
   }).format((n || 0) / 100);
 const modeName = (mode) =>
-  mode === "demo"
+  mode === "cash"
+    ? "CASH AFTER SERVICE — NO ONLINE DEPOSIT"
+    : mode === "demo"
     ? "CLASSROOM SIMULATION — NO MONEY MOVED"
     : mode === "razorpay_test"
       ? "RAZORPAY TEST — NO LIVE COLLECTION"
@@ -71,7 +73,7 @@ function CombinedReceipt({ data }) {
   const { booking: b, summary: s, payments } = data;
   const download = () => {
     const text = [
-      "GHARSEVA — TWO-STAGE TEST PAYMENT SUMMARY",
+      b.paymentPlan?.mode === "cash" ? "GHARSEVA — CASH PAYMENT ACKNOWLEDGMENTS" : "GHARSEVA — TWO-STAGE TEST PAYMENT SUMMARY",
       modeName(b.paymentPlan?.mode || payments[0]?.mode),
       "Not a tax invoice or provider payout confirmation.",
       `Booking: GS-${b._id.slice(-8).toUpperCase()} | ${b.service}`,
@@ -86,6 +88,11 @@ function CombinedReceipt({ data }) {
         cash(s.unallocatedCaptured),
       `Remaining: ${s.remaining === null ? "Awaiting bill" : cash(s.remaining)}`,
       `Collection state: ${label(s.state)}`,
+      ...(b.paymentPlan?.mode === "cash" ? [
+        `Provider recorded cash: ${s.cashReceipt?.providerAt || "No"}`,
+        `Customer confirmed cash: ${s.cashReceipt?.customerAt || "No"}`,
+        "Cash recorded by participants, not independently verified by GharSeva.",
+      ] : []),
       `Provider payout: ${label(s.payoutStatus)}`,
       ...payments.map(
         (p) =>
@@ -97,13 +104,13 @@ function CombinedReceipt({ data }) {
       ),
       a = document.createElement("a");
     a.href = url;
-    a.download = `GharSeva-test-summary-${b._id.slice(-8)}.txt`;
+    a.download = `GharSeva-${b.paymentPlan?.mode === "cash" ? "cash-acknowledgment" : "test-summary"}-${b._id.slice(-8)}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return (
     <section className="gs-pay__combined">
-      <h3>Combined payment summary</h3>
+      <h3>{b.paymentPlan?.mode === "cash" ? "Cash payment summary" : "Combined payment summary"}</h3>
       <dl className="gs-pay__breakdown">
         <div>
           <dt>
@@ -111,14 +118,14 @@ function CombinedReceipt({ data }) {
           </dt>
           <dd>{s.total === null ? "Awaiting bill" : cash(s.total)}</dd>
         </div>
-        <div>
+        {b.paymentPlan?.mode !== "cash" && <div>
           <dt>Deposit credit</dt>
           <dd>{cash(s.depositCredit)}</dd>
-        </div>
-        <div>
+        </div>}
+        {b.paymentPlan?.mode !== "cash" && <div>
           <dt>Balance captured</dt>
           <dd>{cash(s.balanceCaptured)}</dd>
-        </div>
+        </div>}
         <div>
           <dt>Processed refunds</dt>
           <dd>{cash(s.processedRefunds)}</dd>
@@ -129,9 +136,9 @@ function CombinedReceipt({ data }) {
         </div>
       </dl>
       <p>
-        The deposit is part of the final total. It is deducted once. Refund
-        requests are not processed refunds. Customer collection does not pay out
-        the professional.
+        {b.paymentPlan?.mode === "cash"
+          ? "Cash is paid directly to the provider after the final bill is approved. Both participants must confirm it; GharSeva does not independently verify physical cash."
+          : "The deposit is part of the final total. It is deducted once. Refund requests are not processed refunds. Customer collection does not pay out the professional."}
       </p>
       {!!s.unallocatedCaptured && (
         <p className="gs-pay__alert">
@@ -147,7 +154,7 @@ function CombinedReceipt({ data }) {
       )}
       <button className="btn light small" onClick={download}>
         <Download size={14} />
-        Download test summary & references
+        {b.paymentPlan?.mode === "cash" ? "Download cash acknowledgment summary" : "Download test summary & references"}
       </button>
     </section>
   );
@@ -590,6 +597,7 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
     bill = data?.bill,
     deposit = data?.payments.find((p) => p.purpose !== "FINAL_BALANCE"),
     balance = data?.payments.find((p) => p.purpose === "FINAL_BALANCE"),
+    cashPlan = b?.paymentPlan?.type === "CASH_AFTER_SERVICE_V1",
     newPlan = b?.paymentPlan?.type === "DEPOSIT_BALANCE_V1",
     frozen = !!b?.billing?.balancePayment || !!b?.billing?.settledAt,
     blocked = busy || checkoutOpen,
@@ -638,7 +646,7 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
                 <strong>
                   {modeName(b.paymentPlan?.mode || data.options.mode)}
                 </strong>
-                <p>{data.options.notice}</p>
+                <p>{cashPlan ? "No advance payment or Razorpay checkout. Cash is collected only after the service and approved bill." : data.options.notice}</p>
               </div>
             </div>
             <h3>
@@ -650,12 +658,15 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
             <strong className="gs-pay__stage-state" role="status">
               {label(s.state)}
             </strong>
-            {!newPlan && (
+            {!newPlan && !cashPlan && (
               <p>
                 This historical booking keeps its original optional-deposit
                 behaviour. No new service-start requirement or final-bill debt
                 has been imposed.
               </p>
+            )}
+            {cashPlan && (
+              <p>Provider acceptance → visit OTP → completed service → customer approves final bill → cash paid directly to provider → both sides confirm.</p>
             )}
             {newPlan && (
               <p>
@@ -673,7 +684,7 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
               </p>
             )}
             {s.issue && <p className="gs-pay__alert">{s.issue}</p>}
-            <section>
+            {!cashPlan && <section>
               <h3>
                 {newPlan
                   ? "Deposit before service"
@@ -730,11 +741,11 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
                     )}
                   </>
                 )}
-            </section>
-            {newPlan && (
+            </section>}
+            {(newPlan || cashPlan) && (
               <Extras data={data} user={user} busy={blocked} act={act} />
             )}
-            {newPlan &&
+            {(newPlan || cashPlan) &&
               user.role === "provider" &&
               b.status === "COMPLETED" &&
               !frozen &&
@@ -802,7 +813,7 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
                           )
                         }
                       >
-                        Approve bill & continue to payment
+                        {cashPlan ? "Approve final bill for cash payment" : "Approve bill & continue to payment"}
                       </button>
                       <form
                         className="gs-pay__form"
@@ -842,7 +853,7 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
                   )}
               </section>
             )}
-            {data.canBalance &&
+            {!cashPlan && data.canBalance &&
               (!balance || ["READY", "FAILED"].includes(balance.status)) && (
                 <section>
                   <h3>Remaining balance {cash(s.remaining)}</h3>
@@ -869,7 +880,7 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
                   )}
                 </section>
               )}
-            {simulation &&
+            {!cashPlan && simulation &&
               ["READY", "FAILED"].includes(
                 data.payments.find((p) => p._id === simulation._id)?.status,
               ) && (
@@ -903,8 +914,40 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
                   ))}
                 </div>
               )}
+            {cashPlan && bill?.status === "APPROVED" && !s.issue && (
+              <section className="gs-pay__combined" aria-label="Cash-after-service collection">
+                <h3>Cash after service · {cash(bill.total)}</h3>
+                <p>No ₹99 deposit. No Razorpay payment is needed.</p>
+                {s.settled ? (
+                  <p className="gs-pay__pill">Completed &amp; Paid — provider and customer confirmed cash payment.</p>
+                ) : s.cashReceipt?.providerAt ? (
+                  <>
+                    <p>Provider recorded receiving cash on {new Date(s.cashReceipt.providerAt).toLocaleString("en-IN")}.</p>
+                    {user.role === "customer" && (
+                      <button className="btn full" disabled={blocked}
+                        onClick={() => act(() => api(`/payments/booking/${bookingId}/cash/confirm`, { method: "POST", body: { confirm: true } }))}>
+                        I paid {cash(bill.total)} in cash — confirm
+                      </button>
+                    )}
+                    {user.role === "provider" && <p>Waiting for customer confirmation. Do not mark paid until cash has actually been received.</p>}
+                  </>
+                ) : (
+                  <>
+                    <p>Cash due: {cash(bill.total)}. The provider should record receipt only after receiving the cash.</p>
+                    {user.role === "provider" && (
+                      <button className="btn full" disabled={blocked}
+                        onClick={() => act(() => api(`/payments/booking/${bookingId}/cash/received`, { method: "POST", body: { confirm: true } }))}>
+                        I received {cash(bill.total)} in cash
+                      </button>
+                    )}
+                    {user.role === "customer" && <p>Pay the provider directly and wait for their receipt confirmation.</p>}
+                  </>
+                )}
+                <p className="gs-pay__fine">This is a record of participants' acknowledgments, not independent verification of cash movement.</p>
+              </section>
+            )}
             <CombinedReceipt data={data} />
-            <button
+            {!cashPlan && <button
               className="btn light"
               disabled={blocked}
               onClick={() =>
@@ -918,8 +961,8 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
             >
               <RefreshCw size={15} />
               Reconcile payment & refund status
-            </button>
-            <h3>Separate payment records</h3>
+            </button>}
+            {!cashPlan && <h3>Separate payment records</h3>}
             {data.payments.map((p) => (
               <article className="gs-pay__record" key={p._id}>
                 <strong>
@@ -1054,7 +1097,7 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
                 )}
               </article>
             ))}
-            {newPlan && (
+            {(newPlan || cashPlan) && (
               <details>
                 <summary>Bill versions & approval history</summary>
                 {b.billing?.versions?.map((v) => (
@@ -1077,10 +1120,9 @@ export function PaymentJourney({ bookingId, onClose, onChanged = () => {} }) {
               </details>
             )}
             <p className="gs-pay__fine">
-              Collection and service completion are separate. Provider payout:
-              not initiated. For an actual Razorpay test refund, use its test
-              Dashboard and reconcile here. No live keys or automatic payouts
-              are enabled.
+              {cashPlan
+                ? "GharSeva keeps a two-sided cash acknowledgment. No online checkout or automatic payout is performed."
+                : "Collection and service completion are separate. Provider payout: not initiated. For an actual Razorpay test refund, use its test Dashboard and reconcile here. No live keys or automatic payouts are enabled."}
             </p>
           </>
         )}
@@ -1131,13 +1173,13 @@ export function Payments() {
             SERVICE. APPROVAL. CLEAR PAYMENT RECORDS.
           </span>
           <h2>
-            Deposit first.
+            Cash after service.
             <br />
-            <em>Approved balance after service.</em>
+            <em>No deposit for new bookings.</em>
           </h2>
           <p>
-            Review deposit capture, agreed extras, final bill versions and
-            remaining payment. Collection is separate from professional payouts.
+            New bookings: approve the bill, pay your provider cash, then confirm
+            the receipt. Older online payment records remain available.
           </p>
         </div>
         <Wallet size={38} />
@@ -1196,9 +1238,11 @@ export function Payments() {
                 </p>
                 <strong>{label(b.summary.state)}</strong>
                 <p>
-                  {b.paymentPlan
-                    ? "Deposit " + cash(b.paymentPlan.depositAmount)
-                    : "Historical optional deposit"}{" "}
+                  {b.paymentPlan?.mode === "cash"
+                    ? "Cash after service (no advance)"
+                    : b.paymentPlan
+                      ? "Deposit " + cash(b.paymentPlan.depositAmount)
+                      : "Historical optional deposit"}{" "}
                   · Remaining{" "}
                   {b.summary.remaining === null
                     ? "awaiting bill"
@@ -1215,7 +1259,7 @@ export function Payments() {
       </div>
       {journeys && !journeys.items.length && <p>No bookings in this view.</p>}
       <div className="gs-pay__tools">
-        <h3>Deposit & balance ledger</h3>
+        <h3>Historical online payment ledger</h3>
         <select
           aria-label="Payment mode filter"
           value={mode}
@@ -1224,7 +1268,7 @@ export function Payments() {
             setPage(1);
           }}
         >
-          <option value="">All test modes</option>
+          <option value="">All historical online modes</option>
           <option value="demo">Classroom simulation</option>
           <option value="razorpay_test">Razorpay test</option>
         </select>

@@ -690,7 +690,7 @@ export function ProviderDetails() {
                   <small> / visit</small>
                 </strong>
                 <span>
-                  Starting estimate · deposit + approved balance online
+                  Starting estimate · cash after service, no deposit
                 </span>
               </div>
               {!p.available ? (

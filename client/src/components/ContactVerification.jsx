@@ -409,6 +409,7 @@ export function SocialSignIn({
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
+  if (!options?.google) return null;
   return (
     <div
       className="gs-login-social"

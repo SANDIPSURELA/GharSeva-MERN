@@ -1001,9 +1001,9 @@ export function ServiceAssistant() {
         <ShieldCheck size={17} />
         <p>
           Only your explicit confirmation sends a PENDING request. The
-          professional must accept, then the required deposit and visit
-          verification precede work. Approve the final bill and pay its
-          remaining balance online.
+          professional must accept the booking. Share your visit OTP when
+          they arrive. After service, approve the final bill, pay cash to
+          the provider, and confirm the payment in GharSeva.
         </p>
       </section>
     </div>
@@ -1270,21 +1270,13 @@ function AssistantBooking({
               </dd>
             </div>
           </dl>
-          <p>
-            Required deposit after acceptance:{" "}
-            {prepared.paymentPlan
-              ? money(prepared.paymentPlan.depositAmount / 100)
-              : "Review current terms"}
-            . Credited against the approved final total.{" "}
-            {prepared.paymentsEnabled === false &&
-              "Online checkout is currently unavailable; required payment gates still apply."}
-          </p>
+          <p>Cash after service — no advance payment required.</p>
           <p className="gs-assistant__review-note">
             This draft expires in 20 minutes and does not hold the slot.
             Additional work/materials need agreement. The professional must
-            accept the PENDING request. Pay the required deposit online before
-            visit verification and work, then the approved remaining balance
-            online after completion. No payment is initiated here.
+            accept the PENDING request. Share the visit OTP before work.
+            After service, approve the final bill, pay cash directly to the provider,
+            and confirm cash payment in GharSeva. No advance is required.
           </p>
           <div className="gs-assistant__booking-actions">
             <button

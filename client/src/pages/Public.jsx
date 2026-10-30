@@ -336,7 +336,7 @@ const faqs = [
   ],
   [
     "How do payments work?",
-    "New bookings require an online deposit after provider acceptance and before arrival verification and work. Approve extras and the final itemised bill, then pay the approved total less the valid deposit credit online. Razorpay TEST receipts do not represent live money collection or provider payout. Unavailable checkout blocks required payments; historical bookings retain their saved rules.",
+    "New bookings use cash after service with no advance deposit. The customer shares the visit OTP before work, approves the final itemised bill after service, pays cash to the provider and confirms payment in GharSeva. Historical bookings keep their original payment rules.",
   ],
   [
     "Can I change or cancel my booking?",
@@ -789,13 +789,11 @@ export function Policy({ privacy = false }) {
               <p>
                 A booking request requires provider acceptance. Listed prices
                 are starting estimates. Additional work or parts must be agreed
-                through customer approval. New bookings require an online
-                deposit after acceptance and before arrival verification and
-                work, then the approved remaining balance online after
-                completion. Historical bookings retain their saved rules.
-                Razorpay TEST receipts do not represent live collection or a
-                final service invoice. Deposits are credited toward agreed
-                charges; cancellation requires a separate refund review.
+                through customer approval. New bookings use cash after service,
+                with no advance deposit. The customer approves the itemised
+                final bill, pays cash directly to the provider, and both
+                participants acknowledge payment in GharSeva. Historical
+                bookings retain their original payment and refund rules.
               </p>
               <h2>Visit code and reviews</h2>
               <p>

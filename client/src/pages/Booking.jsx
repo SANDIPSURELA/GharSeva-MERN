@@ -338,7 +338,7 @@ export function Booking() {
               </div>
               <div className="summary-row">
                 <span>Payment</span>
-                <strong>Deposit + approved balance online</strong>
+                <strong>Cash after service — no deposit</strong>
               </div>
               <hr />
               <div className="summary-row total">
@@ -346,12 +346,10 @@ export function Booking() {
                 <strong>{money(p.price)}</strong>
               </div>
               <p className="small-text muted">
-                Additional parts or work may cost extra. Agree with your
-                professional through the approval flow. After acceptance, pay
-                the required deposit online before arrival verification and
-                work. After completion, approve the itemised bill and pay the
-                remaining balance online. Checkout uses clearly labelled TEST
-                payments; unavailable configuration blocks payment.
+                No advance payment is required. Your visit OTP is still needed
+                to start work. After the service, review and approve the itemised
+                final bill, then pay cash directly to your provider. The provider
+                records receipt and you confirm payment in GharSeva.
               </p>
               <div className="info-box">
                 <ShieldCheck size={20} />

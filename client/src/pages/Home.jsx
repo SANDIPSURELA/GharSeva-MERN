@@ -35,7 +35,7 @@ const questions = [
   ],
   [
     "What does the starting price include?",
-    "The listed amount is a starting estimate. After provider acceptance, pay the required deposit online before arrival verification and work. Approve extras, review the itemised final bill after completion, then pay the approved total less the credited deposit online. Razorpay TEST payments do not collect live money; unavailable checkout blocks required payments. Historical bookings retain their saved rules.",
+    "New bookings use cash after service with no advance deposit. The customer shares the visit OTP before work, approves the final itemised bill after service, pays cash to the provider and confirms payment in GharSeva. Historical bookings keep their original payment rules.",
   ],
   [
     "When should I share my visit OTP?",
@@ -234,7 +234,7 @@ export function Home() {
             [
               Wallet,
               "A clear conversation",
-              "Approve extras, then pay the approved balance online.",
+              "Approve extras and the final bill, then pay cash after service.",
             ],
           ].map(([Icon, title, text]) => (
             <div key={title}>
@@ -506,7 +506,7 @@ export function Home() {
               [
                 "04",
                 "Finish with confidence",
-                "Approve extras and the final bill, pay the remaining balance online, and review the completed service. Work completion and payment settlement are separate.",
+                "Approve extras and the final bill, pay the provider in cash, then confirm the payment in GharSeva. Work completion and payment confirmation are separate.",
               ],
             ].map(([number, title, text]) => (
               <article key={number}>

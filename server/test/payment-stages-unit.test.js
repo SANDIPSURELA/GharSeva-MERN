@@ -1161,7 +1161,7 @@ test("Razorpay HTTP adapter sends separate paise orders and validates reference 
   );
   assert.equal(seen.length, 4);
 });
-test("ordinary booking handler snapshots authoritative capped plan and ignores forged browser financial fields", async () => {
+test("ordinary booking handler creates cash plan without deposits and ignores forged browser financial fields", async () => {
   Object.assign(provider.profile, {
     category: "plumbing",
     city: "Ahmedabad",
@@ -1196,8 +1196,9 @@ test("ordinary booking handler snapshots authoritative capped plan and ignores f
   const created = await createCustomerBooking(customer, input);
   assert.equal(created.status, "PENDING");
   assert.equal(created.price, 100);
-  assert.equal(created.paymentPlan.depositAmount, 10000);
-  assert.equal(created.paymentPlan.mode, "demo");
+  assert.equal(created.paymentPlan.depositAmount, 0);
+  assert.equal(created.paymentPlan.mode, "cash");
+  assert.equal(created.paymentPlan.type, "CASH_AFTER_SERVICE_V1");
   assert.equal(created.customer._id, customer._id);
   assert.equal(created.billing, undefined);
   process.env.PAYMENTS_MODE = "disabled";
@@ -1205,8 +1206,8 @@ test("ordinary booking handler snapshots authoritative capped plan and ignores f
     ...input,
     time: "10:00",
   });
-  assert.equal(ordinary.paymentPlan.depositAmount, 10000);
-  assert.equal(ordinary.paymentPlan.mode, "razorpay_test");
+  assert.equal(ordinary.paymentPlan.depositAmount, 0);
+  assert.equal(ordinary.paymentPlan.mode, "cash");
   assert.equal(ordinary.status, "PENDING");
 });
 
