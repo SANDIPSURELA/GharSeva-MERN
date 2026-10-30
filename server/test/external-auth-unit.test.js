@@ -52,8 +52,8 @@ const options = {
   apple: true,
   firebase: { projectId: "fixture" },
 };
-test("Google and Apple popup adapters use memory persistence, recent token and cleanup without an extra application OTP", async () => {
-  for (const provider of ["google", "apple"]) {
+test("Google popup adapter use memory persistence, recent token and cleanup without an extra application OTP", async () => {
+  for (const provider of ["google"]) {
     const f = fixture();
     assert.equal(
       await externalToken(options, provider, f.loader),
@@ -175,7 +175,7 @@ test("duplicate requests cannot launch simultaneous provider popups", async () =
   const first = externalToken(options, "google", async () => modules);
   while (!complete) await new Promise((resolve) => setImmediate(resolve));
   await assert.rejects(
-    () => externalToken(options, "apple", async () => modules),
+    () => externalToken(options, "google", async () => modules),
     /already in progress/,
   );
   complete({ user: { getIdToken: async () => "fixture" } });
@@ -205,7 +205,7 @@ test("preparation never signs in; a stale application session prevents any excha
   assert.equal(requested, 0);
   const result = await exchangeExternalIdentity({
     options,
-    provider: "apple",
+    provider: "google",
     details: { action: "login", idToken: "forged", provider: "google" },
     token: async () => "verified-boundary-fixture",
     request: async (path, request) => ({ path, body: request.body }),
@@ -215,7 +215,7 @@ test("preparation never signs in; a stale application session prevents any excha
     body: {
       action: "login",
       idToken: "verified-boundary-fixture",
-      provider: "apple",
+      provider: "google",
     },
   });
 });

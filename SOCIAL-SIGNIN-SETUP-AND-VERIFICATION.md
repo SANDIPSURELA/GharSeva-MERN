@@ -1,3 +1,5 @@
+> Current policy (30 October 2026): Google is the only supported social sign-in. Apple authentication is retired; historical identities are preserved. See FINAL-PROJECT-HANDOFF.md for the current code, test evidence and deployment checklist. Earlier results below are historical.
+
 # Direct Google and Apple sign-in — setup and verification
 
 27 October 2026. Local milestone in C:\workspace\GharSeva-MERN, based on commit 8f566da. The working tree was clean at inspection. Earlier Brevo, catalog/demo, Razorpay, city, document, approval and session work remains intact.

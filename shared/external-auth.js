@@ -35,11 +35,7 @@ let generation = 0,
   operation = false,
   activeAuth;
 function enabled(options, provider) {
-  if (
-    !["google", "apple"].includes(provider) ||
-    !options?.[provider] ||
-    !options.firebase
-  )
+  if (provider !== "google" || !options?.[provider] || !options.firebase)
     throw Error("This sign-in provider needs configuration.");
 }
 async function setup(options, loadSdk) {
@@ -62,7 +58,7 @@ async function setup(options, loadSdk) {
   return activeAuth;
 }
 export async function prepareExternalAuth(options, loadSdk = defaultLoader) {
-  if ((!options?.google && !options?.apple) || !options.firebase) return;
+  if (!options?.google || !options.firebase) return;
   await setup(options, loadSdk);
 }
 export async function clearExternalIdentity() {
@@ -85,16 +81,8 @@ export async function externalToken(
     if (started !== generation)
       throw Error("Sign-in was cancelled because the session changed.");
     const { sdk, auth } = connection;
-    const method =
-      provider === "google"
-        ? new sdk.GoogleAuthProvider()
-        : new sdk.OAuthProvider("apple.com");
-    if (provider === "google")
-      method.setCustomParameters({ prompt: "select_account" });
-    else {
-      method.addScope("email");
-      method.addScope("name");
-    }
+    const method = new sdk.GoogleAuthProvider();
+    method.setCustomParameters({ prompt: "select_account" });
     const result = await sdk.signInWithPopup(auth, method);
     token = await result.user.getIdToken(true);
     if (started !== generation)
@@ -110,7 +98,7 @@ export async function externalToken(
 }
 // Compatibility utility only: UI does not initiate redirects or offer an orphan recovery action.
 export async function recoverExternalToken(options, loadSdk = defaultLoader) {
-  if ((!options?.google && !options?.apple) || !options.firebase)
+  if (!options?.google || !options.firebase)
     throw Error("External sign-in needs configuration.");
   if (operation) throw Error("A social sign-in is already in progress.");
   operation = true;

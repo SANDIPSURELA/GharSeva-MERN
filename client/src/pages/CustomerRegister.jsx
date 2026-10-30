@@ -176,15 +176,6 @@ export function CustomerRegister({ invitation = null }) {
         "Use 8–72 characters, uppercase, lowercase and a number.";
     else if (new TextEncoder().encode(form.password).length > 72)
       nextErrors.password = "Use a shorter password (up to 72 bytes).";
-    if (
-      identity?.provider === "apple.com" &&
-      /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/.test(
-        identity.contact,
-      ) &&
-      !form.appleRelayConsent
-    )
-      nextErrors.terms =
-        "Please allow association of your Apple relay identity with these contact details.";
     if (!canonicalCity(form.city))
       nextErrors.city = "Choose your service city.";
     if (!form.terms)
@@ -527,28 +518,6 @@ export function CustomerRegister({ invitation = null }) {
                   )}
                   {fieldError("password")}
                 </div>
-                {identity.provider === "apple.com" &&
-                  /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/.test(
-                    identity.contact,
-                  ) && (
-                    <div className="gs-register__consent">
-                      <div>
-                        <input
-                          id="gs-apple-consent"
-                          type="checkbox"
-                          checked={form.appleRelayConsent}
-                          onChange={(e) =>
-                            change("appleRelayConsent", e.target.checked)
-                          }
-                        />
-                        <label htmlFor="gs-apple-consent">
-                          I agree to associate my Apple private relay identity
-                          with the name and mobile details I provide for
-                          GharSeva.
-                        </label>
-                      </div>
-                    </div>
-                  )}
                 <div className="gs-register__consent">
                   <div>
                     <input

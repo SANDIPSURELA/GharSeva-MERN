@@ -31,13 +31,9 @@ services:
         sync: false
       - key: REQUIRE_VERIFIED_REGISTRATION
         value: "true"
-      - key: REQUIRE_PROVIDER_IDENTITY
-        value: "true"
       - key: PAYMENTS_MODE
         value: disabled
       - key: AUTH_GOOGLE_ENABLED
-        value: "false"
-      - key: AUTH_APPLE_ENABLED
         value: "false"
       - key: ASSISTANT_AI_ENABLED
         value: "false"

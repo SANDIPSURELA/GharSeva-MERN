@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  FileText,
   Save,
   ShieldCheck,
   Wrench,
@@ -20,7 +19,7 @@ import { Loading } from "../components/UI";
 import { ContactVerification } from "../components/ContactVerification";
 import "./Login.css";
 import "./ProviderRegister.css";
-const steps = ["Your details", "Your services", "Documents", "Review"];
+const steps = ["Your details", "Your services", "Confirm details", "Review"];
 const initial = {
   name: "",
   email: "",
@@ -43,7 +42,6 @@ export function ProviderRegister({ invitation = null }) {
     [step, setStep] = useState(1),
     [saveConsent, setSaveConsent] = useState(false),
     [followUp, setFollowUp] = useState(false),
-    [documentFile, setDocumentFile] = useState(null),
     [terms, setTerms] = useState(false),
     [visible, setVisible] = useState(false),
     [busy, setBusy] = useState(false),
@@ -116,7 +114,7 @@ export function ProviderRegister({ invitation = null }) {
           setFollowUp(a.followUpConsent);
           revision.current = a.revision;
           setSaveStatus(
-            "Saved application restored. Re-enter a password and select your document before submitting.",
+            "Saved application restored. Re-enter your password before submitting.",
           );
         }
       })
@@ -212,7 +210,6 @@ export function ProviderRegister({ invitation = null }) {
       setDraftReady(false);
       setSaveStatus("");
       setError("");
-      setDocumentFile(null);
       setTerms(false);
     } catch (e) {
       setError(e.message);
@@ -254,16 +251,6 @@ export function ProviderRegister({ invitation = null }) {
         return "Enter experience from 0 to 50 years.";
     }
     if (number === 3) {
-      if (!documentFile)
-        return "Choose a supporting PDF or image for administrator review.";
-      if (
-        identity.provider === "apple.com" &&
-        /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/.test(
-          identity.contact,
-        ) &&
-        !form.appleRelayConsent
-      )
-        return "Please allow association of your Apple relay identity with these contact details.";
       if (!terms) return "Please agree to the terms and privacy policy.";
     }
     return "";
@@ -302,18 +289,16 @@ export function ProviderRegister({ invitation = null }) {
           category: form.categories[0],
           skills: ["General service"],
           verifiedRegistration: true,
-          identityWorkflow: true,
           ...(invitation ? { invitationToken: invitation.token } : {}),
           followUpConsent: followUp,
         }),
       );
-      data.append("document", documentFile);
       const account = await api("/auth/register", {
         method: "POST",
         body: data,
       });
       setUser(account);
-      navigate("/dashboard/provider?section=verification", { replace: true });
+      navigate("/dashboard/provider?section=application", { replace: true });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -394,14 +379,14 @@ export function ProviderRegister({ invitation = null }) {
                 choose
               </li>
               <li>
-                <ShieldCheck size={17} aria-hidden="true" /> Review documents
-                before submitting
+                <ShieldCheck size={17} aria-hidden="true" /> Simple
+                administrator approval
               </li>
             </ul>
             <p className="gs-apply__aside-note">
-              For individual professionals. Supporting documents are privately
-              reviewed by the project administrator; uploading a file is not
-              Aadhaar authentication.
+              For individual professionals. Register your service details and
+              wait for administrator approval. Identity images and supporting
+              files are not required.
             </p>
           </aside>
           <div className="gs-signin__card">
@@ -476,7 +461,7 @@ export function ProviderRegister({ invitation = null }) {
                     Verify your email or mobile to start. Use the same contact
                     to resume a saved application. You will set a GharSeva
                     password after verification, including when you choose
-                    Google or Apple.
+                    Google.
                   </p>
                 )}
                 {identity && !draftReady && (
@@ -728,73 +713,12 @@ export function ProviderRegister({ invitation = null }) {
                       )}
                       {step === 3 && (
                         <>
-                          <div className="gs-apply__upload">
-                            <FileText size={27} aria-hidden="true" />
-                            <strong>A supporting document for review</strong>
-                            <p>
-                              Upload a qualification, work certificate or
-                              another suitable supporting document. Use
-                              fictional documents for classroom demonstrations.
-                              Do not upload a full Aadhaar number for this demo.
-                            </p>
-                            <label htmlFor="gs-apply-document">
-                              Choose PDF, JPG, PNG or WebP · Maximum 3 MB
-                            </label>
-                            <input
-                              id="gs-apply-document"
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.webp"
-                              disabled={busy}
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f && f.size > 3 * 1024 * 1024) {
-                                  setError("Choose a file of 3 MB or less.");
-                                  e.target.value = "";
-                                  setDocumentFile(null);
-                                } else {
-                                  setDocumentFile(f || null);
-                                  setError("");
-                                }
-                              }}
-                            />
-                            {documentFile && (
-                              <span>
-                                {documentFile.name} ·{" "}
-                                {Math.ceil(documentFile.size / 1024)} KB
-                              </span>
-                            )}
-                          </div>
                           <p className="gs-apply__aside-note">
-                            After creating your account, complete the private
-                            identity review step with front/back images. Your
-                            listing stays pending until an administrator reviews
-                            it. Supporting documents are uploaded only with your
-                            final submission and are accessible to you and
-                            administrators. A saved draft does not include a
-                            selected file.
+                            No identity images or documents are required.
+                            Confirm the terms below, then review your service
+                            profile. Your account stays pending until an
+                            administrator approves it.
                           </p>
-                          {identity.provider === "apple.com" &&
-                            /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/.test(
-                              identity.contact,
-                            ) && (
-                              <label className="gs-apply__terms">
-                                <input
-                                  type="checkbox"
-                                  checked={form.appleRelayConsent}
-                                  onChange={(e) =>
-                                    change(
-                                      "appleRelayConsent",
-                                      e.target.checked,
-                                    )
-                                  }
-                                />
-                                <span>
-                                  I agree to associate my Apple private relay
-                                  identity with the name and mobile details I
-                                  provide for GharSeva.
-                                </span>
-                              </label>
-                            )}
                           <label className="gs-apply__terms">
                             <input
                               type="checkbox"
@@ -853,13 +777,6 @@ export function ProviderRegister({ invitation = null }) {
                               <small>Experience & starting visit price</small>
                               <strong>
                                 {form.experience} years · ₹{form.price} / visit
-                              </strong>
-                            </div>
-                            <div>
-                              <small>Supporting document</small>
-                              <strong>
-                                {documentFile?.name ||
-                                  "Select your document again"}
                               </strong>
                             </div>
                             <div>

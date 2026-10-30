@@ -93,6 +93,9 @@ function query(v) {
     limit() {
       return q;
     },
+    skip() {
+      return q;
+    },
     lean() {
       lean = true;
       return q;
@@ -189,7 +192,13 @@ before(async () => {
     mock.method(model, "findById", (id) =>
       query(rows.find((r) => eq(r._id, id))),
     );
-    mock.method(model, "exists", async (f) => rows.some((r) => matches(r, f)));
+    mock.method(model, "exists", async (f) => {
+      const r = rows.find((r) => matches(r, f));
+      return r ? { _id: r._id } : null;
+    });
+    mock.method(model, "distinct", async (field) => [
+      ...new Set(rows.map((r) => value(r, field)).filter(Boolean)),
+    ]);
     mock.method(
       model,
       "countDocuments",
@@ -236,20 +245,20 @@ async function call(
   const route = app.router.stack.find(
     (l) =>
       l.route?.methods[method.toLowerCase()] &&
-      new RegExp("^" + l.route.path.replace(/:id/g, "([^/]+)") + "$").test(
-        "/api" + url.pathname,
-      ),
+      new RegExp(
+        "^" + l.route.path.replace(/:id|:provider/g, "([^/]+)") + "$",
+      ).test("/api" + url.pathname),
   )?.route;
   assert.ok(route, "route exists: " + method + " " + path);
   const match = ("/api" + url.pathname).match(
-    new RegExp("^" + route.path.replace(/:id/g, "([^/]+)") + "$"),
+    new RegExp("^" + route.path.replace(/:id|:provider/g, "([^/]+)") + "$"),
   );
   const req = {
     method,
     file,
     body: body || {},
     query: Object.fromEntries(url.searchParams),
-    params: { id: match?.[1] },
+    params: { id: match?.[1], provider: match?.[1] },
     headers: {
       cookie: cookie || "",
       ...(context ? { "x-gharseva-context": context } : {}),
@@ -691,6 +700,7 @@ test("identifier collisions and production expansion are preserved or rejected w
 test("provider registration persists the canonical city in account, service profile and pending application", async () => {
   const body = {
     name: "New City Professional",
+    identityWorkflow: true,
     email: "new.city.provider@example.com",
     mobile: "9876599902",
     password: "ProviderCity123",
@@ -707,12 +717,6 @@ test("provider registration persists the canonical city in account, service prof
   };
   const r = await call("/auth/register", {
     body,
-    file: {
-      originalname: "supporting.pdf",
-      buffer: readFileSync(
-        new URL("../fixtures/demo-document.pdf", import.meta.url),
-      ),
-    },
   });
   assert.equal(r.status, 201, JSON.stringify(r.data));
   const u = await User.findOne({ email: body.email });
@@ -799,6 +803,107 @@ test("category-filtered discovery and assistant use only enabled categories and 
   );
 });
 
+test("simple provider approval needs no documents, reuses admin proof and rejects unauthorized or stale decisions", async () => {
+  const p = await User.findOne({ email: "new.city.provider@example.com" });
+  assert.equal(p.profile.documents.length, 0);
+  assert.equal(p.profile.identityRequired, false);
+  const admin = await login("admin@gharseva.com", "Admin12345");
+  const session = tables
+    .get(models.AuthSession)
+    .find((s) => s.context === admin.context);
+  session.reauthenticatedAt = new Date(Date.now() - 6 * 60000);
+  const application = await models.ProviderApplication.findOne({ user: p._id });
+  const decide = (auth, action = "APPROVED", revision = application.revision) =>
+    call("/admin/applications/" + application._id, {
+      ...auth,
+      method: "PATCH",
+      body: { action, revision },
+    });
+  assert.equal((await decide(customerAuth)).status, 403);
+  assert.equal(
+    (await decide(await login(p.email, "ProviderCity123"))).status,
+    403,
+  );
+  assert.equal((await decide({})).status, 401);
+  const waiting = await call("/admin/applications", admin);
+  assert.equal(waiting.status, 200, JSON.stringify(waiting.data));
+  assert.equal(
+    waiting.data.items.find((a) => a._id === String(application._id))
+      .approvalReadiness.ready,
+    true,
+  );
+  // Historical optional evidence is retained even when expired/unreviewed.
+  const record = await models.ProviderIdentity.create({
+    provider: p._id,
+    accountName: p.name,
+    state: "SUBMITTED",
+    evidenceExpiresAt: new Date(0),
+  });
+  p.profile.identityRequired = true;
+  const evidenceSnapshot = JSON.stringify(record.toObject());
+  const originalUpdate = User.findOneAndUpdate;
+  const racingUpdate = mock.method(
+    User,
+    "findOneAndUpdate",
+    (filter, update, options) => {
+      if (eq(filter._id, p._id)) p.status = "SUSPENDED";
+      return originalUpdate(filter, update, options);
+    },
+  );
+  try {
+    assert.equal((await decide(admin)).status, 409);
+    assert.equal(p.profile.status, "PENDING");
+  } finally {
+    racingUpdate.mock.restore();
+    p.status = "ACTIVE";
+  }
+  assert.equal((await decide(admin)).status, 200);
+  assert.equal(p.profile.status, "APPROVED");
+  assert.equal(String(p.profile.approvedBy), String(session.user));
+  assert.ok(p.profile.approvedAt);
+  assert.equal(JSON.stringify(record.toObject()), evidenceSnapshot);
+  assert.equal(
+    p.profile.identityRequired,
+    true,
+    "historical flags are preserved, not mandatory",
+  );
+  assert.ok(application.history.some((h) => h.action === "APPROVED"));
+  assert.equal(
+    (await decide(admin, "REJECTED", application.revision - 1)).status,
+    409,
+  );
+  assert.ok(
+    (await call("/providers?city=Ahemdabad&category=plumbing")).data.some(
+      (u) => u._id === String(p._id),
+    ),
+  );
+  assert.equal((await decide(admin, "REJECTED")).status, 200);
+  assert.equal(p.profile.status, "REJECTED");
+  assert.ok(
+    !(await call("/providers?city=Ahmedabad&category=plumbing")).data.some(
+      (u) => u._id === String(p._id),
+    ),
+  );
+  const approved = await call("/admin/users/" + p._id, {
+    ...admin,
+    method: "PATCH",
+    body: { approval: "APPROVED" },
+  });
+  assert.equal(approved.status, 200, JSON.stringify(approved.data));
+  assert.equal(p.profile.status, "APPROVED");
+  assert.equal(
+    (
+      await call("/admin/users/" + p._id, {
+        ...admin,
+        method: "PATCH",
+        body: { status: "SUSPENDED" },
+      })
+    ).status,
+    403,
+  );
+  assert.equal(p.status, "ACTIVE");
+});
+
 test("one full isolated booking journey retains provider ownership, admin read access, OTP and two distinct simulated collections", async () => {
   mock.method(models.Payment.collection, "indexes", async () => [
     { name: "_id_", key: { _id: 1 }, unique: true },
@@ -808,7 +913,7 @@ test("one full isolated booking journey retains provider ownership, admin read a
       unique: true,
     },
   ]);
-  const p = await User.findOne({ email: "ahm.plumbing1@example.com" });
+  const p = await User.findOne({ email: "new.city.provider@example.com" });
   // Advance only the isolated fixture send window; no real waiting or production rate-limit change.
   for (const row of tables.get(models.ContactThrottle)) {
     row.nextAllowedAt = new Date(0);
@@ -816,7 +921,7 @@ test("one full isolated booking journey retains provider ownership, admin read a
     row.count = 0;
   }
   const owner = await login("customer@gharseva.com", "Customer123");
-  const pro = await login(p.email, "Provider123");
+  const pro = await login(p.email, "ProviderCity123");
   const wrong = await login("ahm.plumbing2@example.com", "Provider123");
   const admin = await login("admin@gharseva.com", "Admin12345");
   const created = await call("/bookings", {

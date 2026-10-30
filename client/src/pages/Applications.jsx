@@ -26,6 +26,7 @@ const states = [
   ["REJECTED", "Rejected"],
 ];
 export function Applications() {
+  const { setToast } = useApp();
   const currentRequest = useRef(0);
   const [data, setData] = useState(null),
     [state, setState] = useState(""),
@@ -74,6 +75,13 @@ export function Applications() {
         method: "PATCH",
         body: { action, note: notes[a._id] || "", revision: a.revision },
       });
+      setToast(
+        action === "APPROVED"
+          ? "Provider approved. The active, available profile can now appear in its city and category."
+          : action === "REJECTED"
+            ? "Provider rejected and hidden from booking."
+            : "Application updated.",
+      );
       await load();
     } catch (e) {
       setError(e.message);
@@ -163,7 +171,11 @@ export function Applications() {
                   <span
                     className={`gs-applications__status gs-applications__status--${a.state.toLowerCase()}`}
                   >
-                    {a.inactive ? "Inactive draft" : label(a.state)}
+                    {a.inactive
+                      ? "Inactive draft"
+                      : a.state === "SUBMITTED"
+                        ? "Pending"
+                        : label(a.state)}
                   </span>
                 </div>
                 <div className="gs-applications__facts">
@@ -201,13 +213,28 @@ export function Applications() {
                     </strong>
                   </div>
                 </div>
-                {a.user?._id && (
-                  <Link
-                    className="gs-id__return"
-                    to={`/dashboard/admin?section=verification&provider=${a.user._id}`}
-                  >
-                    Review private identity evidence <ArrowRight size={14} />
-                  </Link>
+                {a.approvalReadiness && (
+                  <div className="gs-applications__notice" role="status">
+                    {a.approvalReadiness.ready ? (
+                      <p>
+                        Supporting document and identity review checks are
+                        complete. Record your decision below.
+                      </p>
+                    ) : (
+                      <div>
+                        <strong>Before approval</strong>
+                        <ul>
+                          {a.approvalReadiness.issues.map((issue) => (
+                            <li key={issue}>{issue}</li>
+                          ))}
+                        </ul>
+                        <p>
+                          Complete the basic service profile before approval.
+                          Documents and identity images are optional.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
                 {a.data.bio && (
                   <p className="gs-applications__bio">{a.data.bio}</p>
@@ -273,11 +300,7 @@ export function Applications() {
                         <>
                           <button
                             className="btn small"
-                            disabled={
-                              busy ||
-                              (notes[a._id] || "").trim().length < 10 ||
-                              !a.user?.profile?.documents?.length
-                            }
+                            disabled={busy || !a.approvalReadiness?.ready}
                             onClick={() => review(a, "APPROVED")}
                           >
                             <ShieldCheck size={14} />
@@ -294,9 +317,7 @@ export function Applications() {
                           </button>
                           <button
                             className="btn small light"
-                            disabled={
-                              busy || (notes[a._id] || "").trim().length < 10
-                            }
+                            disabled={busy}
                             onClick={() => review(a, "REJECTED")}
                           >
                             Reject
@@ -405,11 +426,11 @@ export function ProviderApplicationStatus() {
   return (
     <section className="gs-applications gs-applications__legacy">
       <span className="eyebrow">YOUR PROFESSIONAL APPLICATION</span>
-      <h2>{label(application?.state || user.profile.status)}</h2>
+      <h2>{label(user.profile.status)}</h2>
       <p>
         {user.profile.status === "APPROVED"
           ? "Your professional profile is approved."
-          : "An administrator reviews your details and supporting document before your services appear in search."}
+          : "An administrator approves your basic service profile before it appears in search. No documents or identity images are required."}
       </p>
       {error && <p role="alert">{error}</p>}
       <Link
@@ -422,13 +443,7 @@ export function ProviderApplicationStatus() {
         className="btn light small"
         to="/dashboard/provider?section=documents"
       >
-        Documents & resubmission
-      </Link>
-      <Link
-        className="btn light small"
-        to="/dashboard/provider?section=verification"
-      >
-        Identity verification <ShieldCheck size={14} />
+        Optional files & resubmission
       </Link>
       <ol className="gs-applications__provider-history">
         {application?.history?.map((h, i) => (
@@ -462,7 +477,7 @@ export function ConnectedSignIn() {
       <h2>Sign-in methods & contact proof</h2>
       <p>
         Password sign-in includes a code sent to your registered email. After
-        signing in, confirm your password to link Google or Apple.
+        signing in, confirm your password to link Google.
       </p>
       <p>
         Email:{" "}
@@ -517,11 +532,11 @@ export function ConnectedSignIn() {
           onChange={(e) => setRelayConsent(e.target.checked)}
           disabled={busy}
         />{" "}
-        I consent to linking Apple private relay identities with the contact
+        I consent to linking a previous private relay identity with the contact
         details and other sign-in methods on this account.
       </label>
       <div className="gs-verify__social">
-        {["google", "apple"].map((provider) => (
+        {["google"].map((provider) => (
           <button
             key={provider}
             type="button"

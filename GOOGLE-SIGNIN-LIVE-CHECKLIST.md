@@ -1,3 +1,5 @@
+> Current policy (30 October 2026): Google is the only supported social sign-in. Apple authentication is retired; historical identities are preserved. See FINAL-PROJECT-HANDOFF.md for the current code, test evidence and deployment checklist. Earlier results below are historical.
+
 # Google sign-in live checklist
 
 27 October 2026. The only file changed in this task is this checklist. No further application change was needed based on local inspection. Prior Google/Apple changes remain uncommitted alongside other local work. Inspected HEAD: 26987f4. No push, deployment, account setup, hosted user or database change was made.

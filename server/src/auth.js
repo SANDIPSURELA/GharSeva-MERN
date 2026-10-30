@@ -192,7 +192,7 @@ export async function auth(req, res, next) {
 // Public discovery may reuse a verified browser session without requiring login.
 export const optionalAuth = (req, res, next) =>
   sessionCookie(req) ? auth(req, res, next) : next();
-export function requireRecentAdmin(req) {
+export function requireVerifiedAdmin(req, recent = true) {
   if (req.user.role !== "admin") return;
   const at = req.authSession?.reauthenticatedAt;
   if (
@@ -200,13 +200,26 @@ export function requireRecentAdmin(req) {
     !Number.isFinite(new Date(at).getTime()) ||
     new Date(at).getTime() > Date.now() ||
     req.authSession.reauthRevision !== (req.user.loginRevision ?? 0) ||
-    Date.now() - new Date(at).getTime() >= sessionPolicy().recentMs
+    (recent && Date.now() - new Date(at).getTime() >= sessionPolicy().recentMs)
   )
     denied(
       403,
       "Confirm your administrator password and email code to continue.",
       "REAUTH_REQUIRED",
     );
+}
+export const requireRecentAdmin = (req) => requireVerifiedAdmin(req);
+// Ordinary document/application decisions reuse the session's password + OTP
+// proof. auth still enforces revocation, idle/absolute expiry and CSRF context.
+export function adminReview(req, res, next) {
+  try {
+    if (req.user.role !== "admin")
+      fail(403, "You do not have permission for this action.");
+    requireVerifiedAdmin(req, false);
+    next();
+  } catch (e) {
+    next(e);
+  }
 }
 export const role =
   (...roles) =>

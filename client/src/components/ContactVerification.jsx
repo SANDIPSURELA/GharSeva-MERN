@@ -71,8 +71,7 @@ export function ContactVerification({
     if (error) errorRef.current?.focus();
   }, [error]);
   useEffect(() => {
-    if (options?.google || options?.apple)
-      prepareExternalAuth(options).catch(() => {});
+    if (options?.google) prepareExternalAuth(options).catch(() => {});
   }, [options]);
   const act = async (fn) => {
     if (lock.current) return;
@@ -162,7 +161,7 @@ export function ContactVerification({
       {methods.social.length > 0 && (
         <>
           <div className="gs-verify__social">
-            {["google", "apple"].map((provider) => (
+            {["google"].map((provider) => (
               <button
                 key={provider}
                 type="button"
@@ -188,20 +187,9 @@ export function ContactVerification({
                   className={provider === "google" ? "gs-verify__google" : ""}
                   aria-hidden="true"
                 >
-                  {provider === "google" ? (
-                    "G"
-                  ) : (
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="17"
-                      height="17"
-                      fill="currentColor"
-                    >
-                      <path d="M16.4 2c.1 1.5-.5 2.6-1.2 3.4-.8.9-2 1.5-3.2 1.4-.1-1.4.5-2.6 1.3-3.4.8-.8 2-1.4 3.1-1.4ZM20.6 17.8c-.5 1.1-.8 1.6-1.4 2.5-.8 1.2-1.9 2.7-3.3 2.7-1.2 0-1.5-.8-3.2-.8s-2 .8-3.2.8c-1.4 0-2.4-1.4-3.3-2.6C3.8 17 3 11.9 5.1 9.1c1.1-1.4 2.7-2.2 4.2-2.2 1.4 0 2.3.8 3.4.8 1 0 1.7-.8 3.4-.8 1.3 0 2.8.7 3.9 2-3.4 1.9-2.8 6.8.6 8.9Z" />
-                    </svg>
-                  )}
+                  G
                 </span>
-                {provider === "google" ? "Google" : "Apple"}
+                Continue with Google
                 {options && !options[provider] && <small>Setup needed</small>}
               </button>
             ))}
@@ -395,8 +383,7 @@ export function SocialSignIn({
     };
   }, []);
   useEffect(() => {
-    if (options?.google || options?.apple)
-      prepareExternalAuth(options).catch(() => {});
+    if (options?.google) prepareExternalAuth(options).catch(() => {});
   }, [options]);
   const authenticate = async (provider) => {
     if (lock.current) return;
@@ -429,7 +416,7 @@ export function SocialSignIn({
       aria-busy={busy}
     >
       <div className="gs-verify__social">
-        {["google", "apple"].map((provider) => (
+        {["google"].map((provider) => (
           <button
             key={provider}
             type="button"
@@ -445,21 +432,9 @@ export function SocialSignIn({
               className={provider === "google" ? "gs-verify__google" : ""}
               aria-hidden="true"
             >
-              {provider === "google" ? (
-                "G"
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  width="17"
-                  height="17"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M16.4 2c.1 1.5-.5 2.6-1.2 3.4-.8.9-2 1.5-3.2 1.4-.1-1.4.5-2.6 1.3-3.4.8-.8 2-1.4 3.1-1.4ZM20.6 17.8c-.5 1.1-.8 1.6-1.4 2.5-.8 1.2-1.9 2.7-3.3 2.7-1.2 0-1.5-.8-3.2-.8s-2 .8-3.2.8c-1.4 0-2.4-1.4-3.3-2.6C3.8 17 3 11.9 5.1 9.1c1.1-1.4 2.7-2.2 4.2-2.2 1.4 0 2.3.8 3.4.8 1 0 1.7-.8 3.4-.8 1.3 0 2.8.7 3.9 2-3.4 1.9-2.8 6.8.6 8.9Z" />
-                </svg>
-              )}
+              G
             </span>
-            {provider === "google" ? "Google" : "Apple"}
+            Continue with Google
             {options && !options[provider] && <small>Setup needed</small>}
           </button>
         ))}

@@ -47,7 +47,7 @@ const questions = [
   ],
   [
     "How are professionals and reviews checked?",
-    "The platform administrator reviews supporting documents before a new profile appears in search. Customers can review their own completed bookings once. Administrator approval is a profile review, not an external background check. Sample profiles and photos in this college project are demonstration content.",
+    "The platform administrator approves service profiles before they appear in search. Documents are optional; profile approval does not verify identity. Customers can review their own completed bookings once. Administrator approval is a profile review, not an external background check. Sample profiles and photos in this college project are demonstration content.",
   ],
 ];
 

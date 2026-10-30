@@ -71,8 +71,8 @@ function verifier(result = claims(), env = config(), extra = {}) {
   });
   return { verify, calls };
 }
-test("Google and Apple use revocation-checked Admin ID tokens and trusted provider claims", async () => {
-  for (const provider of ["google", "apple"]) {
+test("Google uses revocation-checked Admin ID tokens and trusted provider claims", async () => {
+  for (const provider of ["google"]) {
     const f = verifier(claims(provider + ".com"));
     const result = await f.verify("fixture-firebase-id-token", provider);
     assert.equal(result.provider, provider + ".com");
@@ -103,7 +103,7 @@ test("wrong project/issuer/subject, expiry, tenant, sign-in provider and unverif
   }
   await assert.rejects(
     () => verifier(claims("apple.com")).verify("fixture", "google"),
-    /selected provider/,
+    /not enabled/,
   );
 });
 test("malformed input and disabled provider fail before SDK loading; providers are independent", async () => {
@@ -119,7 +119,7 @@ test("malformed input and disabled provider fail before SDK loading; providers a
     await assert.rejects(() => f.verify(token, "google"));
   await assert.rejects(
     () => f.verify("fixture", "apple"),
-    (e) => e.status === 503,
+    (e) => e.status === 400,
   );
   assert.equal(loaded, 0);
   assert.equal(socialReadiness(env).google.configured, true);
@@ -215,15 +215,16 @@ test("timeout/network errors stay unavailable; invalid/revoked/expired credentia
     );
   }
 });
-test("Apple relay and missing subsequent name use trusted identity without inventing profile information", async () => {
-  const c = {
-    ...claims("apple.com"),
-    email: "anonymous@privaterelay.appleid.com",
-  };
-  const result = await verifier(c).verify("fixture", "apple");
-  assert.equal(result.contact, c.email);
-  assert.equal(result.name, "");
+test("retired Apple sign-in is rejected even if old settings remain enabled", async () => {
+  const f = verifier(claims("apple.com"));
+  await assert.rejects(
+    () => f.verify("fixture", "apple"),
+    (e) => e.status === 400,
+  );
+  assert.equal(f.calls.length, 0);
+  assert.equal(socialReadiness(config()).apple.configured, false);
 });
+
 test("production emulator fails closed while incomplete optional provider setup does not disable password login", () => {
   Object.assign(process.env, config(), {
     NODE_ENV: "production",

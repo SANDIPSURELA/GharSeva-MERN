@@ -3,7 +3,10 @@ import { fixtureLogin } from "./login-fixture.js";
 import { test, before, after, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
+import {
+  createIsolatedMongo,
+  connectIsolatedMongo,
+} from "../../scripts/isolated-mongo.js";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { createApp } from "../src/app.js";
@@ -757,7 +760,7 @@ test("expired registration proof and strict legacy verification create no accoun
   assert.equal(await User.exists({ email: i.contact }), null);
 });
 
-test("new queue checks actual documents and serialises competing manual decisions", async () => {
+test("new queue accepts optional documents and serialises competing admin decisions", async () => {
   const i = await identity();
   const created = await submitProvider(i);
   let a = await ProviderApplication.findOne({ user: created.data._id });
@@ -774,18 +777,19 @@ test("new queue checks actual documents and serialises competing manual decision
         body: {
           revision: a.revision,
           action: "APPROVED",
-          note: "A missing document must never permit this approval.",
+          note: "Administrator approves the complete basic service profile.",
         },
         jar: adminCookie,
       })
     ).status,
-    400,
+    200,
   );
-  assert.equal((await User.findById(user._id)).profile.status, "PENDING");
+  assert.equal((await User.findById(user._id)).profile.status, "APPROVED");
   await User.updateOne(
     { _id: user._id },
     { $set: { "profile.documents": documents } },
   );
+  a = await ProviderApplication.findById(a._id);
   const results = await Promise.all(
     ["APPROVED", "REJECTED"].map((action) =>
       call(`/admin/applications/${a._id}`, {

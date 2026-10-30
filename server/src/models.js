@@ -25,6 +25,8 @@ const profile = new Schema(
     slots: { type: [String], default: ["09:00", "11:00", "14:00", "16:00"] },
     documents: [ref("File")],
     identityRequired: { type: Boolean, default: false },
+    approvedBy: ref("User"),
+    approvedAt: Date,
   },
   { _id: false },
 );

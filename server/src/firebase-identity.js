@@ -12,7 +12,7 @@ export function externalIdentityFromClaims(claims, options, expectedProvider) {
   const now = Date.now() / 1000,
     provider = claims?.firebase?.sign_in_provider;
   if (
-    !["google.com", "apple.com"].includes(provider) ||
+    provider !== "google.com" ||
     !(provider === "google.com" ? options?.google : options?.apple)
   )
     fail(403, "This sign-in provider is not enabled.");
@@ -60,8 +60,7 @@ export function createExternalVerifier({
       typeof idToken !== "string" ||
       !idToken ||
       idToken.length > 10000 ||
-      (expectedProvider !== undefined &&
-        !["google", "apple"].includes(expectedProvider))
+      (expectedProvider !== undefined && expectedProvider !== "google")
     )
       fail(400, "Choose a valid external sign-in method.");
     const env = environment(),

@@ -67,7 +67,6 @@ const navigation = {
   ],
   provider: [
     ["application", "My application", ClipboardList],
-    ["verification", "Identity verification", ShieldCheck],
     ["overview", "Overview", LayoutDashboard],
     ["requests", "New requests", CalendarDays],
     ["jobs", "My jobs", BriefcaseBusiness],
@@ -81,7 +80,6 @@ const navigation = {
     ["faculty-showcase", "Faculty Demo Showcase", ShieldCheck],
     ["applications", "Registration requests", ClipboardList],
     ["invitations", "Create accounts", Users],
-    ["verification", "Identity reviews", ShieldCheck],
     ["overview", "Overview", LayoutDashboard],
     ["users", "Customers", Users],
     ["providers", "Providers & approval", ShieldCheck],
@@ -497,9 +495,9 @@ export function Dashboard() {
                 <p>
                   {user.profile.documents.length
                     ? user.profile.status === "REJECTED"
-                      ? "Review your details and supporting documents, then resubmit from Photos & documents."
-                      : "Your supporting document is uploaded. The administrator can now review your profile; your listing appears after approval."
-                    : "Sign-in is available. Upload a supporting PDF or image in Photos & documents so the administrator can approve your service listing."}
+                      ? "Update your service details and resubmit for administrator review from Photos & documents."
+                      : "Your service profile is awaiting administrator approval. No identity images or document review are required."
+                    : "Sign-in is available. An administrator can approve your service profile; documents are optional."}
                 </p>
               </div>
               <button
@@ -1460,29 +1458,21 @@ function Uploads({ user, setUser, setToast, refresh }) {
       <div className="card settings-card">
         <h2>Documents for profile review</h2>
         <p className="muted">
-          Upload a supporting PDF or image for administrator review. Documents
-          are private to you and the administrator. For the classroom
-          demonstration, use the sample below.
+          Profile photos and supporting files are optional. Supporting files
+          stay private to you and the administrator; they are not required for
+          listing approval.
         </p>
-        <p>
-          <a
-            className="text-link"
-            href="/demo/provider-document.pdf"
-            download="GharSeva-sample-document.pdf"
-          >
-            Download the classroom sample document
-          </a>
-        </p>
+
         <div className="info-box">
           <ShieldCheck size={18} />
           <span>
             {user.profile.documents.length
               ? user.profile.status === "APPROVED"
-                ? "Profile approved. Keep at least one supporting document; upload a replacement before removing the last one."
+                ? "Profile approved. Supporting documents are optional and remain private."
                 : user.profile.status === "REJECTED"
                   ? "Update your document or profile, then resubmit for administrator review below."
-                  : "Document uploaded. Your profile is ready for administrator review."
-              : "No document uploaded yet. Choose the sample PDF or your supporting image below to make your profile ready for review."}
+                  : "Optional document uploaded. Approval depends on your service profile, not identity review."
+              : "No optional document uploaded. You can still submit your service profile for approval."}
           </span>
         </div>
         <div className="document-list">
@@ -1532,7 +1522,7 @@ function Uploads({ user, setUser, setToast, refresh }) {
         {user.profile.status === "REJECTED" && (
           <button
             className="btn light"
-            disabled={busy || !user.profile.documents.length}
+            disabled={busy}
             onClick={async () => {
               setError("");
               setBusy(true);
@@ -1611,12 +1601,6 @@ function AdminContent({ section, data, busy, act, search, setSearch }) {
                 </p>
                 <p className="muted">{u.profile.bio}</p>
                 <div className="admin-document-links">
-                  <Link
-                    className="btn light small"
-                    to={`/dashboard/admin?section=verification&provider=${u._id}`}
-                  >
-                    <ShieldCheck size={14} /> Private identity review
-                  </Link>
                   {u.profile.documents.map((id, i) => (
                     <a
                       className="btn light small"
@@ -1631,13 +1615,21 @@ function AdminContent({ section, data, busy, act, search, setSearch }) {
                   ))}
                   {!u.profile.documents.length && (
                     <span className="muted small-text">
-                      Waiting for a supporting document. This provider can
-                      already sign in with {u.email}, open Photos &amp;
-                      documents, and upload a PDF or image. Approval becomes
-                      available after upload.
+                      No document upload is required. Review the basic service
+                      profile, then approve or reject it.
                     </span>
                   )}
                 </div>
+                {u.approvalReadiness && !u.approvalReadiness.ready && (
+                  <div role="status">
+                    <strong>Before approval</strong>
+                    <ul>
+                      {u.approvalReadiness.issues.map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </>
             )}
             <div className="admin-person-actions">
@@ -1647,10 +1639,10 @@ function AdminContent({ section, data, busy, act, search, setSearch }) {
                   {u.profile.status !== "APPROVED" && (
                     <button
                       className="btn small"
-                      disabled={busy || !u.profile.documents.length}
+                      disabled={busy || !u.approvalReadiness?.ready}
                       title={
-                        !u.profile.documents.length
-                          ? "The provider must upload a supporting document first."
+                        !u.approvalReadiness?.ready
+                          ? "Complete the approval requirements shown above."
                           : "Approve this provider's service listing"
                       }
                       onClick={() =>
@@ -1783,7 +1775,7 @@ function AdminContent({ section, data, busy, act, search, setSearch }) {
           <article className="card">
             <ShieldCheck className="teal" />
             <h3>{data.stats.pending} profiles to review</h3>
-            <p>Check uploaded documents before approving a listing.</p>
+            <p>Review pending service profiles and approve or reject them.</p>
           </article>
         </div>
       </>

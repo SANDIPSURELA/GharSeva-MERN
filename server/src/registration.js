@@ -6,7 +6,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import mongoose from "mongoose";
-import { identityApprovalGuard } from "./provider-identity.js";
+import { providerApprovalRequirements } from "./provider-identity.js";
 import bcrypt from "bcryptjs";
 import { rateLimit } from "express-rate-limit";
 import {
@@ -18,7 +18,7 @@ import {
   User,
   File,
 } from "./models.js";
-import { auth, role, safeUser, setSession } from "./auth.js";
+import { auth, role, adminReview, safeUser, setSession } from "./auth.js";
 import { fail, text } from "./domain.js";
 import {
   checkLoginPortal,
@@ -98,6 +98,11 @@ export async function verifyRegistrationEntry(req, body) {
     process.env.NODE_ENV === "production";
   const session = await registrationSession(req, required);
   if (session) {
+    if (session.externalProvider && session.externalProvider !== "google.com")
+      fail(
+        410,
+        "This sign-in method is no longer available. Verify your email or use Google.",
+      );
     if (
       session.externalProvider === "apple.com" &&
       /@(?:privaterelay\.appleid\.com|private\.icloud\.com)$/.test(
@@ -274,8 +279,6 @@ export function applicationChecks(a, user) {
   if (!d.city || !d.area) checks.push("Service location is incomplete.");
   if (!d.bio || d.bio.length < 30)
     checks.push("Work description needs more detail.");
-  if (!user?.profile?.documents?.length)
-    checks.push("Supporting document needs to be uploaded.");
   if (a.mode !== "live")
     checks.push(
       a.mode === "demo"
@@ -283,7 +286,7 @@ export function applicationChecks(a, user) {
         : "Contact was not verified through the new flow.",
     );
   checks.push(
-    "Document authenticity and name matching require administrator review.",
+    "Administrator profile approval is required. Documents and identity images are optional; listing approval is not identity verification.",
   );
   return checks;
 }
@@ -548,8 +551,15 @@ export function mountRegistration(
     fail(400, "Use password followed by email verification to sign in.");
   });
   app.post("/api/auth/external", checkLimit, async (req, res) => {
+    if (req.body.provider === "apple")
+      fail(
+        410,
+        "This sign-in method is no longer available. Use Google or password sign-in.",
+      );
     // External identity mapping, not a login-page selection, determines the local role.
     const identity = await verifyIdentity(req.body.idToken, req.body.provider);
+    if (identity.provider !== "google.com")
+      fail(401, "Use a verified Google identity.");
     if (!["register", "login", "link"].includes(req.body.action))
       fail(400, "Choose a valid sign-in action.");
     if (
@@ -766,7 +776,7 @@ export function mountRegistration(
     const [rows, total, existingIds] = await Promise.all([
       ProviderApplication.find(filter)
         .select("+contact")
-        .populate("user", "name email mobile profile status")
+        .populate("user", "name email mobile role demoAccountId profile status")
         .sort({ lastActivityAt: -1 })
         .skip((page - 1) * 20)
         .limit(20)
@@ -774,24 +784,29 @@ export function mountRegistration(
       ProviderApplication.countDocuments(filter),
       ProviderApplication.distinct("user"),
     ]);
-    const items = rows.map((a) => {
-      const incomplete = a.state === "DRAFT";
-      const data = { ...a.data };
-      if (incomplete) {
-        delete data.email;
-        delete data.mobile;
-      }
-      return {
-        ...a,
-        contact: incomplete && !a.followUpConsent ? masked(a) : a.contact,
-        data,
-        incomplete,
-        inactive:
-          incomplete &&
-          Date.now() - new Date(a.lastActivityAt).getTime() > 86400000,
-        checks: applicationChecks(a, a.user),
-      };
-    });
+    const items = await Promise.all(
+      rows.map(async (a) => {
+        const incomplete = a.state === "DRAFT";
+        const data = { ...a.data };
+        if (incomplete) {
+          delete data.email;
+          delete data.mobile;
+        }
+        return {
+          ...a,
+          contact: incomplete && !a.followUpConsent ? masked(a) : a.contact,
+          data,
+          incomplete,
+          inactive:
+            incomplete &&
+            Date.now() - new Date(a.lastActivityAt).getTime() > 86400000,
+          checks: applicationChecks(a, a.user),
+          approvalReadiness: incomplete
+            ? null
+            : await providerApprovalRequirements(a.user),
+        };
+      }),
+    );
     const earlierRequests = await User.find({
       role: "provider",
       "profile.status": "PENDING",
@@ -811,13 +826,21 @@ export function mountRegistration(
   app.patch(
     "/api/admin/applications/:id",
     auth,
-    role("admin"),
+    adminReview,
     async (req, res) => {
       if (!mongoose.isValidObjectId(req.params.id))
         fail(404, "Application not found.");
       if (!Number.isInteger(req.body.revision) || req.body.revision < 0)
         fail(400, "Refresh the application before recording a decision.");
-      const note = text(req.body.note, "Review note", 10, 500);
+      const defaultNote = ["APPROVED", "REJECTED"].includes(req.body.action)
+        ? `Administrator ${req.body.action.toLowerCase()} the service profile; documents are optional.`
+        : "";
+      const note = text(
+        req.body.note?.trim() || defaultNote,
+        "Review note",
+        10,
+        500,
+      );
       const a = await ProviderApplication.findOneAndUpdate(
         {
           _id: req.params.id,
@@ -835,7 +858,6 @@ export function mountRegistration(
           409,
           "This application changed or is being reviewed. Refresh before recording a decision.",
         );
-      let releaseIdentity = async () => {};
       try {
         if (a.expiresAt && a.expiresAt <= new Date())
           fail(404, "Application not found.");
@@ -853,22 +875,18 @@ export function mountRegistration(
           const user = await User.findById(a.user);
           if (!user || user.role !== "provider")
             fail(404, "Professional account not found.");
-          let document;
           if (action === "APPROVED") {
-            document = await File.findOne({
-              _id: { $in: user.profile.documents },
-              owner: user._id,
-              kind: "document",
-            }).select("_id");
-            if (!document)
-              fail(400, "Review a supporting document before approval.");
-            releaseIdentity = await identityApprovalGuard(user);
+            const readiness = await providerApprovalRequirements(user);
+            if (!readiness.ready) fail(409, readiness.issues.join(" "));
           }
           const changed = await User.findOneAndUpdate(
             {
               _id: user._id,
               name: user.name,
-              ...(document ? { "profile.documents": document._id } : {}),
+              role: "provider",
+              status: user.status,
+              ...(user.updatedAt ? { updatedAt: user.updatedAt } : {}),
+              "profile.status": user.profile.status,
             },
             {
               $set: {
@@ -878,13 +896,19 @@ export function mountRegistration(
                     : action === "REJECTED"
                       ? "REJECTED"
                       : "PENDING",
+                ...(action === "APPROVED"
+                  ? {
+                      "profile.approvedBy": req.user._id,
+                      "profile.approvedAt": new Date(),
+                    }
+                  : {}),
               },
             },
           );
           if (!changed)
             fail(
               409,
-              "The documents changed during review. Refresh and review again.",
+              "The account changed during review. Refresh before recording a decision.",
             );
         }
         const updated = await ProviderApplication.findOneAndUpdate(
@@ -902,7 +926,6 @@ export function mountRegistration(
             "Another reviewer changed this application. Refresh to see its current state.",
           );
       } finally {
-        await releaseIdentity();
         await ProviderApplication.updateOne(
           { _id: a._id },
           { $unset: { reviewLockUntil: "" } },

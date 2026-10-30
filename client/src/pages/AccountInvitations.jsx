@@ -321,7 +321,7 @@ export function AccountInvitations() {
             <ShieldCheck size={17} />
             <p>
               {form.role === "provider"
-                ? "The professional supplies their own services and documents. Identity review and listing approval are still required."
+                ? "The professional supplies service details and verifies their email. Administrator listing approval is required; documents are optional."
                 : "The customer supplies their contact details and chooses their own password. Existing accounts are never overwritten."}
             </p>
           </div>

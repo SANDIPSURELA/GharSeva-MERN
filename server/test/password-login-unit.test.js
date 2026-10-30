@@ -478,7 +478,7 @@ test("delivery failure, failed resend and missing SMTP never authenticate or rev
 });
 
 test("external mapping gives direct sign-in but preserves roles, suspensions and admin restrictions", async () => {
-  for (const provider of ["google.com", "apple.com"]) {
+  for (const provider of ["google.com"]) {
     const user = await account("provider");
     identities.set(provider, {
       uid: provider,
@@ -515,7 +515,7 @@ test("external mapping gives direct sign-in but preserves roles, suspensions and
   );
 });
 
-test("external onboarding never auto-merges; linking requires completed auth, password and Apple relay consent", async () => {
+test("external onboarding never auto-merges; linking requires completed auth, password confirmation", async () => {
   const user = await account();
   const invoke = (token, extra = {}, cookies) =>
     call(
@@ -566,36 +566,10 @@ test("external onboarding never auto-merges; linking requires completed auth, pa
   identities.set("relay", {
     uid: "relay",
     provider: "apple.com",
-    contact: "new@privaterelay.appleid.com",
+    contact: "legacy@privaterelay.appleid.com",
   });
-  const unknown = await invoke("relay");
-  assert.equal(unknown.data.onboarding, true);
-  assert.equal(unknown.cookies.has("gharseva_session"), false);
+  assert.equal((await invoke("relay")).status, 401);
   assert.equal(tables.get(User).length, 1);
-  assert.equal(
-    (
-      await invoke(
-        "relay",
-        { action: "link", currentPassword: "Example123!" },
-        signed.cookies,
-      )
-    ).status,
-    400,
-  );
-  assert.equal(
-    (
-      await invoke(
-        "relay",
-        {
-          action: "link",
-          currentPassword: "Example123!",
-          appleRelayConsent: true,
-        },
-        signed.cookies,
-      )
-    ).status,
-    200,
-  );
 });
 
 test("verified external claims enforce enabled provider, verified email and recent authentication", () => {
@@ -656,39 +630,22 @@ test("registration verification and recovery keep restricted purposes and never 
   assert.equal(checked.cookies.has("gharseva_session"), false);
 });
 
-test("new Apple relay domain also needs consent and records it only after authenticated linking", async () => {
-  const user = await account(),
-    p = await begin(user),
-    signed = await verify(p);
-  identities.set("new-domain", {
-    uid: "new-domain",
+test("retired Apple requests never create a session or change stored identity bindings", async () => {
+  const user = await account();
+  await ExternalIdentity.create({
+    uid: "old-apple",
     provider: "apple.com",
-    contact: "relay@private.icloud.com",
+    user: user._id,
   });
-  const body = {
-    action: "link",
-    portal: "customer",
-    currentPassword: "Example123!",
-    idToken: "new-domain",
-  };
-  assert.equal(
-    (await call("post", "/api/auth/external", body, signed.cookies)).status,
-    400,
-  );
-  assert.equal(
-    (
-      await call(
-        "post",
-        "/api/auth/external",
-        { ...body, appleRelayConsent: true },
-        signed.cookies,
-      )
-    ).status,
-    200,
-  );
-  assert.ok(
-    tables.get(User).find((r) => same(r._id, user._id)).appleRelayConsentAt,
-  );
+  const before = JSON.stringify(tables.get(ExternalIdentity));
+  const r = await call("post", "/api/auth/external", {
+    action: "login",
+    provider: "apple",
+    idToken: "old-apple",
+  });
+  assert.equal(r.status, 410);
+  assert.equal(r.cookies.has("gharseva_session"), false);
+  assert.equal(JSON.stringify(tables.get(ExternalIdentity)), before);
 });
 
 test("forged login role/portal fields never choose permissions; all roles share one challenge flow", async () => {
@@ -739,8 +696,8 @@ test("suspension before password proof never delivers a code or creates a sessio
   assert.equal(record(), undefined);
   assert.equal(r.cookies.has("gharseva_session"), false);
 });
-test("linked Google/Apple customer identities need no portal; admin mappings remain prohibited", async () => {
-  for (const provider of ["google.com", "apple.com"]) {
+test("linked Google customer identities need no portal; admin mappings remain prohibited", async () => {
+  for (const provider of ["google.com"]) {
     for (const storedRole of ["customer", "admin"]) {
       const user = await account(storedRole),
         uid = provider + storedRole;
@@ -1129,7 +1086,7 @@ test("selected-provider mismatch and forged role/email fields cannot change acco
         provider: "apple",
       })
     ).status,
-    401,
+    410,
   );
   const result = await call("post", "/api/auth/external", {
     action: "login",
@@ -1148,8 +1105,8 @@ test("selected-provider mismatch and forged role/email fields cannot change acco
 test("concurrent first social sign-ins create onboarding proof, never an application account/session", async () => {
   identities.set("new", {
     uid: "new",
-    provider: "apple.com",
-    contact: "anonymous@privaterelay.appleid.com",
+    provider: "google.com",
+    contact: "new-social@example.test",
     name: "",
   });
   const results = await Promise.all(
@@ -1157,7 +1114,7 @@ test("concurrent first social sign-ins create onboarding proof, never an applica
       call("post", "/api/auth/external", {
         action: "login",
         idToken: "new",
-        provider: "apple",
+        provider: "google",
         role: "admin",
         email: "forged@example.test",
       }),
@@ -1168,9 +1125,7 @@ test("concurrent first social sign-ins create onboarding proof, never an applica
   );
   assert.ok(results.every((r) => !r.cookies.has("gharseva_session")));
   assert.ok(
-    results.every(
-      (r) => r.data.identity.contact === "anonymous@privaterelay.appleid.com",
-    ),
+    results.every((r) => r.data.identity.contact === "new-social@example.test"),
   );
   assert.equal(tables.get(User).length, 0);
   assert.equal(tables.get(AuthSession).length, 0);
@@ -1201,32 +1156,19 @@ test("concurrent linking is idempotent; adding a provider to the same UID requir
     JSON.stringify(rs),
   );
   assert.equal(tables.get(ExternalIdentity).length, 1);
-  identities.set("apple", {
-    uid: "common-uid",
-    provider: "apple.com",
-    contact: "anonymous@privaterelay.appleid.com",
-  });
-  const login = () =>
-    call("post", "/api/auth/external", {
-      action: "login",
-      idToken: "apple",
-      provider: "apple",
-    });
-  assert.equal((await login()).status, 403);
-  assert.equal((await link("apple")).status, 400);
   assert.equal(
-    (await link("apple", { currentPassword: "wrong", appleRelayConsent: true }))
-      .status,
-    401,
+    (
+      await call("post", "/api/auth/external", {
+        action: "login",
+        idToken: "google",
+        provider: "google",
+      })
+    ).data.user._id,
+    user._id,
   );
-  assert.equal((await link("apple", { appleRelayConsent: true })).status, 200);
-  assert.equal((await link("apple", { appleRelayConsent: true })).status, 200);
-  assert.deepEqual(tables.get(ExternalIdentity)[0].additionalProviders, [
-    "apple.com",
-  ]);
-  assert.equal((await login()).data.user._id, user._id);
   assert.equal(tables.get(User)[0].email, user.email);
 });
+
 test("link ownership, administrator boundary and provider documents/approval remain stored decisions", async () => {
   const pending = await account("provider"),
     admin = await account("admin"),
@@ -1245,12 +1187,12 @@ test("link ownership, administrator boundary and provider documents/approval rem
   });
   identities.set("pending", {
     uid: "pending",
-    provider: "apple.com",
-    contact: "relay@privaterelay.appleid.com",
+    provider: "google.com",
+    contact: "linked-provider@example.test",
   });
   await ExternalIdentity.create({
     uid: "pending",
-    provider: "apple.com",
+    provider: "google.com",
     user: pending._id,
   });
   const original = JSON.stringify(saved);
@@ -1260,7 +1202,7 @@ test("link ownership, administrator boundary and provider documents/approval rem
         await call("post", "/api/auth/external", {
           action: "login",
           idToken: "pending",
-          provider: "apple",
+          provider: "google",
           role: "admin",
           name: "replace",
           city: "Ahmedabad",

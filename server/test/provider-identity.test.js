@@ -7,7 +7,10 @@ import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import sharp from "sharp";
 import jwt from "jsonwebtoken";
-import { createIsolatedMongo, connectIsolatedMongo } from "../../scripts/isolated-mongo.js";
+import {
+  createIsolatedMongo,
+  connectIsolatedMongo,
+} from "../../scripts/isolated-mongo.js";
 import { createApp } from "../src/app.js";
 import {
   User,
@@ -119,6 +122,11 @@ beforeEach(async () => {
     ProviderIdentity.deleteMany({}),
     ProviderApplication.deleteMany({}),
   ]);
+  await Category.updateOne(
+    { slug: "plumbing" },
+    { $set: { name: "Plumbing", enabled: true } },
+    { upsert: true },
+  );
   reading = {
     frontText: "CLASSROOM SAMPLE\nName: Surela Sandip Rajubhai\nNot valid ID",
     backText: "Fictional back",
@@ -127,12 +135,17 @@ beforeEach(async () => {
   [provider, other, customer, admin] = await User.create([
     {
       name: "Sandip Surela",
+      city: "Ahmedabad",
       email: "provider@example.com",
       mobile: "9876500101",
       passwordHash: "test-only",
       role: "provider",
       profile: {
         category: "plumbing",
+        city: "Ahmedabad",
+        area: "Satellite",
+        bio: "A normal plumbing service profile for isolated test fixtures.",
+        price: 349,
         status: "PENDING",
         identityRequired: true,
       },
@@ -424,40 +437,37 @@ test("removal withdraws evidence, preserves audit and cannot affect another prov
   assert.equal(record.check.extractedName, undefined);
   assert.ok(record.history.some((h) => h.action === "WITHDRAWN"));
 });
-test("both administrator listing-approval entries require the current human review", async () => {
+test("ordinary admin approval is independent of optional identity records and preserves them", async () => {
+  const submitted = (await submit()).data.record;
   const application = await ProviderApplication.findOne({ user: provider._id });
-  const a = await call(`/admin/users/${provider._id}`, {
-    as: admin,
-    method: "PATCH",
-    body: { approval: "APPROVED" },
-  });
-  assert.equal(a.status, 409);
-  const b = await call(`/admin/applications/${application._id}`, {
-    as: admin,
-    method: "PATCH",
-    body: {
-      action: "APPROVED",
-      revision: application.revision,
-      note: "All evidence has been checked by the reviewer.",
-    },
-  });
-  assert.equal(b.status, 409);
-  const initial = (await submit()).data.record;
-  await review(initial);
-  const current = await ProviderApplication.findOne({ user: provider._id });
-  const approved = await call(`/admin/applications/${current._id}`, {
-    as: admin,
-    method: "PATCH",
-    body: {
-      action: "APPROVED",
-      revision: current.revision,
-      note: "Human document and application review completed.",
-    },
-  });
-  assert.equal(approved.status, 200);
+  assert.equal(
+    (
+      await call("/admin/users/" + provider._id, {
+        as: admin,
+        method: "PATCH",
+        body: { approval: "APPROVED" },
+      })
+    ).status,
+    200,
+  );
+  const current = await ProviderApplication.findById(application._id);
+  assert.equal(
+    (
+      await call("/admin/applications/" + current._id, {
+        as: admin,
+        method: "PATCH",
+        body: { action: "APPROVED", revision: current.revision },
+      })
+    ).status,
+    200,
+  );
   assert.equal((await User.findById(provider._id)).profile.status, "APPROVED");
+  const retained = await ProviderIdentity.findOne({ provider: provider._id });
+  assert.equal(retained.state, "SUBMITTED");
+  assert.equal(retained.revision, submitted.revision);
 });
-test("expired evidence and document replacement invalidate pending approval", async () => {
+
+test("expired optional evidence stays private without blocking normal listing approval", async () => {
   const initial = (await submit()).data.record;
   const done = (await review(initial)).data.record;
   await File.updateMany(
@@ -476,7 +486,7 @@ test("expired evidence and document replacement invalidate pending approval", as
         body: { approval: "APPROVED" },
       })
     ).status,
-    409,
+    200,
   );
 });
 test("approval lock blocks competing evidence changes and is released explicitly", async () => {
@@ -534,7 +544,7 @@ test("upload throttling is enforced without retaining unconsented images", async
   assert.equal(await File.countDocuments({ kind: "identity" }), 0);
 });
 
-test("new registration workflow requires identity review and profile editing cannot remove that requirement", async () => {
+test("new registration needs no identity review and cannot promote its own pending profile", async () => {
   await Category.updateOne(
     { slug: "plumbing" },
     { $set: { name: "Plumbing", enabled: true } },
@@ -572,7 +582,7 @@ test("new registration workflow requires identity review and profile editing can
     as: null,
   });
   assert.equal(result.status, 201, JSON.stringify(result.data));
-  assert.equal(result.data.profile.identityRequired, true);
+  assert.equal(result.data.profile.identityRequired, false);
   assert.equal(result.data.profile.status, "PENDING");
   const edited = await call("/auth/me", {
     method: "PATCH",
@@ -596,7 +606,7 @@ test("new registration workflow requires identity review and profile editing can
     },
   });
   assert.equal(edited.status, 200);
-  assert.equal(edited.data.profile.identityRequired, true);
+  assert.equal(edited.data.profile.identityRequired, false);
   assert.equal(
     (
       await call(`/admin/users/${result.data._id}`, {
@@ -605,6 +615,6 @@ test("new registration workflow requires identity review and profile editing can
         body: { approval: "APPROVED" },
       })
     ).status,
-    409,
+    200,
   );
 });

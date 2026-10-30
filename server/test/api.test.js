@@ -558,14 +558,21 @@ const registrationForm = (data, bytes) => {
   );
   return form;
 };
-test("provider registration without a document creates no account", async () => {
+test("provider registration without a document creates one pending account", async () => {
   const r = await request("/auth/register", {
     method: "POST",
-    body: registration(),
+    body: registration({
+      email: "without-documents@example.test",
+      mobile: "9999999955",
+    }),
   });
-  assert.equal(r.status, 400);
-  assert.match(r.data.message, /supporting/);
-  assert.equal(await User.countDocuments({ email: "upload@example.com" }), 0);
+  assert.equal(r.status, 201);
+  assert.equal(r.data.profile.status, "PENDING");
+  assert.equal(r.data.profile.documents.length, 0);
+  assert.equal(
+    await User.countDocuments({ email: "without-documents@example.test" }),
+    1,
+  );
 });
 test("invalid and oversized registration documents are rejected before account creation", async () => {
   const before = await File.countDocuments();
@@ -659,7 +666,7 @@ test("rejected providers can resubmit a documented profile and customers cannot"
     409,
   );
 });
-test("approval checks the actual document owner instead of trusting stored IDs", async () => {
+test("approval ignores optional documents but never grants access to another owner evidence", async () => {
   const u = await User.findById(registeredProvider._id);
   const own = [...u.profile.documents];
   const foreign = await File.create({
@@ -680,7 +687,7 @@ test("approval checks the actual document owner instead of trusting stored IDs",
         body: { approval: "APPROVED" },
       })
     ).status,
-    400,
+    200,
   );
   assert.equal(
     (
@@ -689,19 +696,25 @@ test("approval checks the actual document owner instead of trusting stored IDs",
         method: "POST",
       })
     ).status,
-    400,
+    409,
+  );
+  assert.equal(
+    (await request(`/files/${foreign._id}`, { as: "registered" })).status,
+    403,
   );
   u.profile.documents = own;
   u.profile.status = "APPROVED";
   await u.save();
 });
-test("approved providers keep a supporting document while replacing old files", async () => {
+test("approved providers may remove an optional document without losing listing approval", async () => {
   const first = registeredProvider.profile.documents[0];
-  assert.equal(
-    (await request(`/files/${first}`, { as: "registered", method: "DELETE" }))
-      .status,
-    409,
-  );
+  const removed = await request("/files/" + first, {
+    as: "registered",
+    method: "DELETE",
+  });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.data.profile.documents.length, 0);
+  assert.equal(removed.data.profile.status, "APPROVED");
   const form = new FormData();
   form.append("kind", "document");
   form.append(
@@ -709,19 +722,15 @@ test("approved providers keep a supporting document while replacing old files", 
     new Blob(["%PDF-1.4 replacement"], { type: "application/pdf" }),
     "replacement.pdf",
   );
-  const upload = await request("/files", {
+  const uploaded = await request("/files", {
     as: "registered",
     method: "POST",
     body: form,
   });
-  assert.equal(upload.status, 201);
-  const removed = await request(`/files/${first}`, {
-    as: "registered",
-    method: "DELETE",
-  });
-  assert.equal(removed.status, 200);
-  assert.equal(removed.data.profile.documents.length, 1);
+  assert.equal(uploaded.status, 201);
+  assert.equal(uploaded.data.user.profile.documents.length, 1);
 });
+
 test("an existing pending account without documents can upload and become approved", async () => {
   const u = await User.create({
     ...registration({ email: "legacy@example.com", mobile: "9999999966" }),
@@ -749,7 +758,7 @@ test("an existing pending account without documents can upload and become approv
         body: { approval: "APPROVED" },
       })
     ).status,
-    400,
+    200,
   );
   const form = new FormData();
   form.append("kind", "document");
@@ -774,7 +783,7 @@ test("an existing pending account without documents can upload and become approv
     200,
   );
 });
-test("concurrent document removals cannot empty an approved provider's document list", async () => {
+test("concurrent optional-document removals preserve listing approval and ownership", async () => {
   const form = new FormData();
   form.append("kind", "document");
   form.append(
@@ -795,18 +804,18 @@ test("concurrent document removals cannot empty an approved provider's document 
       request(`/files/${fileId}`, { as: "registered", method: "DELETE" }),
     ),
   );
-  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 200]);
   const me = await request("/auth/me", { as: "registered" });
-  assert.equal(me.data.profile.documents.length, 1);
+  assert.equal(me.data.profile.documents.length, 0);
   assert.equal(
     await File.countDocuments({
       _id: { $in: me.data.profile.documents },
       owner: registeredProvider._id,
     }),
-    1,
+    0,
   );
 });
-test("concurrent approval and document removal never leave an approved profile without a document", async () => {
+test("concurrent approval and optional document removal preserve independent listing and document state", async () => {
   const u = await User.findOne({ email: "legacy@example.com" });
   await request(`/admin/users/${u._id}`, {
     as: "admin",
@@ -833,7 +842,7 @@ test("concurrent approval and document removal never leave an approved profile w
         owner: current._id,
         kind: "document",
       }),
-      1,
+      0,
     );
 });
 test("registration rejects an admin role and weak passwords", async () => {

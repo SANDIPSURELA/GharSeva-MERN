@@ -22,7 +22,7 @@ import express from "express";
 import { proxyHops } from "./deployment.js";
 import {
   mountProviderIdentity,
-  identityApprovalGuard,
+  providerApprovalRequirements,
 } from "./provider-identity.js";
 import { mountAssistant } from "./service-assistant.js";
 import cors from "cors";
@@ -58,6 +58,8 @@ import {
   auth,
   optionalAuth,
   role,
+  adminReview,
+  requireRecentAdmin,
   safeUser,
   setSession,
   clearSession,
@@ -107,12 +109,6 @@ function uploadedMime(file, kind) {
     fail(400, "Images must be smaller than 1 MB.");
   return mime;
 }
-const hasSupportingDocument = (user) =>
-  File.exists({
-    _id: { $in: user.profile?.documents || [] },
-    owner: user._id,
-    kind: "document",
-  });
 const accountInput = (body) => ({
   name: text(body.name, "Name", 3, 80),
   email: email(body.email),
@@ -536,11 +532,6 @@ export function createApp({
       if (roleName === "provider" && !(await settings()).providerRegistration)
         fail(409, "Provider registration is temporarily paused.");
       if (body.terms !== true) fail(400, "Please accept the terms.");
-      if (roleName === "provider" && !req.file)
-        fail(
-          400,
-          "Upload a supporting PDF or image so the administrator can review your provider profile.",
-        );
       if (roleName === "customer" && req.file)
         fail(
           400,
@@ -552,12 +543,9 @@ export function createApp({
       const hash = await bcrypt.hash(password(body.password), 12);
       const profile =
         roleName === "provider" ? await profileInput(body) : undefined;
-      if (profile)
-        profile.identityRequired =
-          Boolean(body.invitationToken) ||
-          body.identityWorkflow === true ||
-          process.env.REQUIRE_PROVIDER_IDENTITY === "true" ||
-          process.env.NODE_ENV === "production";
+      // Contact proof and manual admin approval remain required; uploads are optional.
+      // Existing account flags and private evidence are never rewritten.
+      if (profile) profile.identityRequired = false;
       const userId = new mongoose.Types.ObjectId();
       let document;
       let user;
@@ -615,10 +603,10 @@ export function createApp({
     async (req, res) => {
       if (req.user.profile.status === "APPROVED")
         fail(409, "Your profile is already approved.");
-      if (!(await hasSupportingDocument(req.user)))
+      if (ownerImportedDemo(req.user))
         fail(
-          400,
-          "Upload a supporting document in Photos & documents before requesting review.",
+          403,
+          "Faculty showcase accounts cannot request real-provider approval.",
         );
       req.user.profile.status = "PENDING";
       await req.user.save();
@@ -863,26 +851,10 @@ export function createApp({
     if (!file) fail(404, "File not found.");
     if (file.kind === "identity")
       fail(403, "Manage verification evidence from the identity page.");
-    if (file.kind === "document" && req.user.profile.status === "APPROVED") {
-      const otherDocument = await File.exists({
-        _id: { $in: req.user.profile.documents, $ne: file._id },
-        owner: req.user._id,
-        kind: "document",
-      });
-      if (!otherDocument)
-        fail(
-          409,
-          "Upload a replacement document before removing the last document from an approved profile.",
-        );
-    }
     if (file.kind === "document") {
       const updated = await User.findOneAndUpdate(
         {
           _id: req.user._id,
-          $or: [
-            { "profile.status": { $ne: "APPROVED" } },
-            { "profile.documents.1": { $exists: true } },
-          ],
         },
         { $pull: { "profile.documents": file._id } },
         { returnDocument: "after" },
@@ -890,7 +862,7 @@ export function createApp({
       if (!updated)
         fail(
           409,
-          "Upload a replacement document before removing the last document from an approved profile.",
+          "The provider account changed. Refresh before managing optional documents.",
         );
       await file.deleteOne();
       return res.json(safeUser(updated));
@@ -1126,7 +1098,14 @@ export function createApp({
       ]);
     const completed = bookings.filter((b) => b.status === "COMPLETED");
     res.json({
-      users: users.map(safeUser),
+      users: await Promise.all(
+        users.map(async (u) => ({
+          ...safeUser(u),
+          ...(u.role === "provider" && u.profile.status !== "APPROVED"
+            ? { approvalReadiness: await providerApprovalRequirements(u) }
+            : {}),
+        })),
+      ),
       categories,
       bookings,
       reviews,
@@ -1141,15 +1120,17 @@ export function createApp({
       },
     });
   });
-  app.patch("/api/admin/users/:id", auth, role("admin"), async (req, res) => {
+  app.patch("/api/admin/users/:id", auth, adminReview, async (req, res) => {
+    // Suspension/reactivation changes account access and retains recent proof.
+    if (req.body.status !== undefined) requireRecentAdmin(req);
     const u = await User.findById(id(req.params.id));
-    let supportingDocument;
     if (!u || u.role === "admin")
       fail(400, "Administrator accounts cannot be changed here.");
+    const originalStatus = u.status,
+      originalApproval = u.profile?.status;
     if (req.body.status !== undefined) {
       if (!["ACTIVE", "SUSPENDED"].includes(req.body.status))
         fail(400, "Invalid account status.");
-      u.status = req.body.status;
     }
     if (req.body.approval !== undefined) {
       if (
@@ -1158,67 +1139,65 @@ export function createApp({
       )
         fail(400, "Invalid provider approval.");
       if (req.body.approval === "APPROVED") {
-        supportingDocument = await hasSupportingDocument(u);
-        if (!supportingDocument)
-          fail(
-            400,
-            "A provider must upload a supporting document before approval. They can sign in and use Photos & documents to upload it.",
-          );
+        if ((req.body.status || u.status) !== "ACTIVE")
+          fail(409, "The provider account must be active before approval.");
+        const readiness = await providerApprovalRequirements(u);
+        if (!readiness.ready) fail(409, readiness.issues.join(" "));
       }
-      u.profile.status = req.body.approval;
     }
-    const releaseIdentity =
-      req.body.approval === "APPROVED"
-        ? await identityApprovalGuard(u)
-        : async () => {};
-    try {
-      const changes = {};
-      if (req.body.status !== undefined) changes.status = u.status;
-      if (req.body.approval !== undefined)
-        changes["profile.status"] = u.profile.status;
-      if (!Object.keys(changes).length) return res.json(safeUser(u));
-      const filter = { _id: u._id, name: u.name };
-      if (supportingDocument)
-        filter["profile.documents"] = supportingDocument._id;
-      const updated = await User.findOneAndUpdate(
-        filter,
-        {
-          $set: changes,
-          ...(req.body.status !== undefined
-            ? { $inc: { sessionVersion: 1 } }
-            : {}),
-        },
-        { returnDocument: "after", runValidators: true },
+    const changes = {};
+    if (req.body.status !== undefined) changes.status = req.body.status;
+    if (req.body.approval !== undefined)
+      changes["profile.status"] = req.body.approval;
+    if (req.body.approval === "APPROVED") {
+      changes["profile.approvedBy"] = req.user._id;
+      changes["profile.approvedAt"] = new Date();
+    }
+    if (!Object.keys(changes).length) return res.json(safeUser(u));
+    const filter = {
+      _id: u._id,
+      name: u.name,
+      role: u.role,
+      status: originalStatus,
+      ...(u.updatedAt ? { updatedAt: u.updatedAt } : {}),
+      ...(req.body.approval !== undefined
+        ? { "profile.status": originalApproval }
+        : {}),
+    };
+    const updated = await User.findOneAndUpdate(
+      filter,
+      {
+        $set: changes,
+        ...(req.body.status !== undefined
+          ? { $inc: { sessionVersion: 1 } }
+          : {}),
+      },
+      { returnDocument: "after", runValidators: true },
+    );
+    if (!updated)
+      fail(
+        409,
+        "The account changed during review. Refresh before recording a decision.",
       );
-      if (!updated)
-        fail(
-          409,
-          "The supporting documents changed during review. Refresh and review the current document before approving.",
-        );
-      if (req.body.approval !== undefined)
-        await ProviderApplication.updateOne(
-          { user: u._id },
-          {
-            $set: {
-              state:
-                req.body.approval === "PENDING"
-                  ? "SUBMITTED"
-                  : req.body.approval,
-            },
-            $inc: { revision: 1 },
-            $push: {
-              history: {
-                action: req.body.approval,
-                note: "Administrator updated the provider approval from the account panel.",
-                actor: req.user._id,
-              },
+    if (req.body.approval !== undefined)
+      await ProviderApplication.updateOne(
+        { user: u._id },
+        {
+          $set: {
+            state:
+              req.body.approval === "PENDING" ? "SUBMITTED" : req.body.approval,
+          },
+          $inc: { revision: 1 },
+          $push: {
+            history: {
+              action: req.body.approval,
+              note: "Administrator updated the provider approval from the account panel.",
+              actor: req.user._id,
             },
           },
-        );
-      res.json(safeUser(updated));
-    } finally {
-      await releaseIdentity();
-    }
+        },
+      );
+    res.json(safeUser(updated));
   });
   app.post("/api/admin/categories", auth, role("admin"), async (req, res) => {
     const name = text(req.body.name, "Category name", 3, 70);

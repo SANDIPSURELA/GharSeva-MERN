@@ -8,7 +8,7 @@ export function verificationAvailability(
   );
   const social =
     showSocial && !["verify", "recover"].includes(purpose) && !fixedChannel
-      ? ["google", "apple"].filter((key) => options?.[key] === true)
+      ? ["google"].filter((key) => options?.[key] === true)
       : [];
   return { channels, social, available: channels.length + social.length > 0 };
 }

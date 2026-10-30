@@ -92,8 +92,8 @@ export function socialReadiness(env = process.env) {
       enabled: enabled("google"),
     },
     apple: {
-      configured: enabled("apple") && errors.length === 0,
-      enabled: enabled("apple"),
+      configured: false,
+      enabled: false,
     },
   };
 }

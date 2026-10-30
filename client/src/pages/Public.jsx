@@ -344,7 +344,7 @@ const faqs = [
   ],
   [
     "How are profiles reviewed?",
-    "New professionals upload supporting documents. The project administrator reviews them and approves the profile before it appears in search. Seeded profiles are fictional demonstration records.",
+    "New professionals provide their service details. An administrator approves the service profile before it appears in search. Documents are optional; approval does not establish identity verification. Faculty Demo profiles remain fictional and cannot receive normal bookings.",
   ],
 ];
 export function About() {
@@ -706,7 +706,7 @@ export function Policy({ privacy = false }) {
               <h2>Contact verification and external sign-in</h2>
               <p>
                 When configured, email codes are delivered through the project’s
-                email service, SMS codes through Twilio Verify, and Google/Apple
+                email service, SMS codes through Twilio Verify, and Google
                 identity proof through Firebase Authentication. Classroom demo
                 mode sends no messages and labels test proof as a demonstration.
                 Codes expire in five minutes; registration sessions last 30
