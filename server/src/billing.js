@@ -4,6 +4,7 @@ import { auth, role } from "./auth.js";
 import { fail, text } from "./domain.js";
 import {
   NEW_PLAN,
+  CASH_PLAN,
   financialState,
   currentBill,
   calculateBill,
@@ -67,7 +68,7 @@ export async function markSettlement(b) {
 export function mountBilling(app, { context, refreshCredits }) {
   const get = async (req) => {
     const c = await context(req.params.id, req.user);
-    if (c.booking.paymentPlan?.type !== NEW_PLAN)
+    if (![NEW_PLAN, CASH_PLAN].includes(c.booking.paymentPlan?.type))
       fail(
         409,
         "This historical booking keeps its original optional-deposit workflow.",
@@ -75,7 +76,7 @@ export function mountBilling(app, { context, refreshCredits }) {
     return c;
   };
   const editable = (b) => {
-    if (b.billing?.balancePayment || b.billing?.settledAt)
+    if (b.billing?.balancePayment || b.billing?.settledAt || b.billing?.cashReceipt?.providerAt)
       fail(
         409,
         "The approved bill is frozen against a payment or settlement. Reconcile it before any further action.",
@@ -202,7 +203,7 @@ export function mountBilling(app, { context, refreshCredits }) {
       if (req.body.decision === "APPROVED") {
         if (req.body.confirm !== true)
           fail(400, "Explicitly approve the bill before payment.");
-        await refreshCredits(b);
+        if (b.paymentPlan?.type !== CASH_PLAN) await refreshCredits(b);
         b = (await context(req.params.id, req.user)).booking;
         editable(b);
         bill = currentBill(b);

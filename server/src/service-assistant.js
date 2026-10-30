@@ -1,4 +1,4 @@
-import { paymentPlanSnapshot } from "./billing-domain.js";
+import { cashPlanSnapshot } from "./billing-domain.js";
 import { ownerImportedDemo } from "./faculty-showcase.js";
 import { paymentOptions } from "./payment-gateway.js";
 import { serviceSignals } from "./assistant-aliases.js";
@@ -456,7 +456,7 @@ export function mountAssistant(
         city,
         expectedPrice: provider.profile.price,
         expectedArea: provider.profile.area,
-        paymentPlan: paymentPlanSnapshot(provider.profile.price),
+        paymentPlan: cashPlanSnapshot(provider.profile.price),
         expiresAt: new Date(Date.now() + 20 * 60000),
       });
       res.status(201).json(await draftView(draft));

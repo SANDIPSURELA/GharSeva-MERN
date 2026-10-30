@@ -1,6 +1,7 @@
 import { fail, text } from "./domain.js";
 import { paymentOptions } from "./payment-gateway.js";
 export const NEW_PLAN = "DEPOSIT_BALANCE_V1";
+export const CASH_PLAN = "CASH_AFTER_SERVICE_V1";
 export const CAPTURED = ["CAPTURED", "PARTIALLY_REFUNDED", "REFUNDED"];
 export const unsettled = (p) =>
   ["CREATING", "READY", "AUTHORIZED", "FAILED"].includes(p.status);
@@ -40,6 +41,16 @@ export function paymentPlanSnapshot(price, options = paymentOptions()) {
     mode: options.mode === "demo" ? "demo" : "razorpay_test",
     depositAmount: Math.min(depositRupees * 100, estimateAmount),
     estimateAmount,
+    currency: "INR",
+  };
+}
+// Cash after service is the default for NEW bookings only. Historical gateway plans stay intact.
+export function cashPlanSnapshot(price) {
+  return {
+    type: CASH_PLAN,
+    mode: "cash",
+    depositAmount: 0,
+    estimateAmount: rupeesToPaise(price),
     currency: "INR",
   };
 }
@@ -108,6 +119,8 @@ export function calculateBill(items, b) {
 }
 const reference = (value) => String(value?._id ?? value ?? "");
 export function paymentRecordIssue(b, p) {
+  if (b.paymentPlan?.type === CASH_PLAN)
+    return "Unexpected online payment on a cash-only booking. Contact support.";
   if (b.paymentPlan?.type !== NEW_PLAN) return "";
   const plan = b.paymentPlan,
     f = financialState(b),
@@ -148,6 +161,36 @@ export function paymentRecordIssue(b, p) {
 }
 
 export function paymentSummary(b, payments, refunds = []) {
+  if (b.paymentPlan?.type === CASH_PLAN) {
+    const f = financialState(b);
+    const bill = currentBill(b);
+    const cash = f.cashReceipt;
+    const valid = Boolean(bill?.status === "APPROVED" &&
+      cash?.billVersion === bill.version && cash?.amount === bill.total);
+    const confirmed = valid && !!cash.providerAt && !!cash.customerAt &&
+      f.settledVersion === bill.version && f.settledTotal === bill.total && !!f.settledAt;
+    const issue = payments.length || refunds.length
+      ? "Unexpected online payment records on a cash booking require review." : "";
+    let state = "AWAITING_ACCEPTANCE";
+    if (b.status === "CANCELLED" || b.status === "REJECTED") state = b.status;
+    else if (b.status === "COMPLETED") state = "AWAITING_BILL";
+    else if (b.status !== "PENDING") state = "SERVICE_SCHEDULED";
+    if (bill?.status === "SUBMITTED") state = "BILL_AWAITING_APPROVAL";
+    if (bill?.status === "CORRECTION_REQUESTED") state = "BILL_CORRECTION_REQUESTED";
+    if (bill?.status === "APPROVED") state = confirmed ? "SETTLED" :
+      valid && cash.providerAt ? "CASH_AWAITING_CUSTOMER" : "CASH_DUE";
+    if (issue) state = "RECONCILIATION_REQUIRED";
+    return {
+      state, total: bill?.total ?? null, grossCaptured: 0,
+      unallocatedCaptured: 0, processedRefunds: 0, credit: 0,
+      depositCredit: 0, balanceCaptured: 0,
+      remaining: confirmed ? 0 : bill?.total ?? null,
+      overpayment: 0, depositPaid: false, pendingRefund: false,
+      refundReview: false, issue, settled: confirmed,
+      cashReceipt: valid ? cash : null,
+      payoutStatus: "NOT_APPLICABLE_CASH",
+    };
+  }
   const bill = currentBill(b),
     f = financialState(b),
     plan = b.paymentPlan;

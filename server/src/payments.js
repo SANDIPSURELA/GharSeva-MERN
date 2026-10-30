@@ -116,8 +116,9 @@ export async function paymentContext(id, user) {
     extras: financialState(b).extras,
     summary,
     options,
-    canPay: user.role === "customer" && allowed.includes(b.status),
+    canPay: b.paymentPlan?.type !== "CASH_AFTER_SERVICE_V1" && user.role === "customer" && allowed.includes(b.status),
     canBalance:
+      b.paymentPlan?.type !== "CASH_AFTER_SERVICE_V1" &&
       user.role === "customer" &&
       b.status === "COMPLETED" &&
       bill?.status === "APPROVED" &&
@@ -737,8 +738,10 @@ export function mountPayments(app, { gateway = razorpayGateway() } = {}) {
       )
         fail(400, "Explicitly review and accept this payment amount.");
       const options = paymentOptions();
-      if (!options.enabled) fail(503, options.notice);
       let b = await bookingFor(req.params.id, req.user);
+      if (b.paymentPlan?.type === "CASH_AFTER_SERVICE_V1")
+        fail(409, "This booking is cash-after-service. No online deposit or checkout is required.");
+      if (!options.enabled) fail(503, options.notice);
       if (b.paymentPlan && b.paymentPlan.mode !== options.mode)
         fail(
           409,

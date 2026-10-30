@@ -1071,7 +1071,7 @@ test("both admin approval paths serialize concurrent decisions and recover a par
   assert.equal(p.profile.status, "APPROVED");
 });
 
-test("one full isolated booking journey retains provider ownership, admin read access, OTP and two distinct simulated collections", async () => {
+test("one historical deposit-plan booking retains provider ownership, admin access, OTP and two distinct simulated collections", async () => {
   mock.method(models.Payment.collection, "indexes", async () => [
     { name: "_id_", key: { _id: 1 }, unique: true },
     {
@@ -1105,6 +1105,11 @@ test("one full isolated booking journey retains provider ownership, admin read a
   });
   assert.equal(created.status, 201, JSON.stringify(created.data));
   const id = created.data._id;
+  // This particular regression test exercises a PRE-EXISTING two-stage booking.
+  // Fresh bookings use CASH_AFTER_SERVICE_V1; do not change that production rule.
+  const historicalBooking = tables.get(Booking).find((row) => eq(row._id, id));
+  assert.equal(historicalBooking.paymentPlan.type, "CASH_AFTER_SERVICE_V1");
+  historicalBooking.paymentPlan = paymentPlanSnapshot(historicalBooking.price);
   const status = (auth, value, code) =>
     call("/bookings/" + id + "/status", {
       ...auth,

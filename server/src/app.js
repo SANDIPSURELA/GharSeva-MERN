@@ -9,13 +9,14 @@ import {
   ownerImportedDemo,
 } from "./faculty-showcase.js";
 import { canonicalCity, supportedCities } from "../../shared/cities.js";
-import { paymentPlanSnapshot } from "./billing-domain.js";
+import { cashPlanSnapshot } from "./billing-domain.js";
 import {
   mountPaymentWebhook,
   mountPayments,
   requireDepositBeforeStart,
 } from "./payments.js";
 import { paymentOptions } from "./payment-gateway.js";
+import { mountCashPayments } from "./cash-payments.js";
 import {
   mountAccountInvitations,
   claimAccountInvitation,
@@ -287,7 +288,7 @@ export async function createCustomerBooking(user, input, extra = {}) {
       (provider.profile.area || "").trim().replace(/\s+/g, " ").toLowerCase()
   )
     fail(409, "The professional service area changed. Review current options.");
-  const plan = paymentPlanSnapshot(provider.profile.price);
+  const plan = cashPlanSnapshot(provider.profile.price);
   if (
     extra.expectedPaymentPlan &&
     ["type", "mode", "currency", "depositAmount", "estimateAmount"].some(
@@ -296,7 +297,7 @@ export async function createCustomerBooking(user, input, extra = {}) {
   )
     fail(
       409,
-      "Deposit terms changed. Review the current request before confirming.",
+      "Payment terms changed. Review the current request before confirming.",
     );
   const b = await Booking.create({
     ...(extra.assistantDraft ? { assistantDraft: extra.assistantDraft } : {}),
@@ -419,6 +420,7 @@ export function createApp({
   });
   mountAccountInvitations(app, { settings });
   mountPayments(app, { gateway: paymentGateway });
+  mountCashPayments(app);
   mountProviderIdentity(app, { ocr: identityOcr });
   mountFacultyShowcase(app);
   mountAssistant(app, {

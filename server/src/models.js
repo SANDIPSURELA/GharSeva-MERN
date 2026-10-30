@@ -119,8 +119,8 @@ const bookingSchema = new Schema(
     paymentPlan: {
       type: new Schema(
         {
-          type: { type: String, enum: ["DEPOSIT_BALANCE_V1"] },
-          mode: { type: String, enum: ["demo", "razorpay_test"] },
+          type: { type: String, enum: ["DEPOSIT_BALANCE_V1", "CASH_AFTER_SERVICE_V1"] },
+          mode: { type: String, enum: ["demo", "razorpay_test", "cash"] },
           depositAmount: Number,
           estimateAmount: Number,
           currency: { type: String, enum: ["INR"] },
