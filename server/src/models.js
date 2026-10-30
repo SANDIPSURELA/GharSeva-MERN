@@ -371,6 +371,8 @@ const applicationSchema = new Schema(
     contact: { type: String, select: false },
     mode: String,
     user: ref("User"),
+    approvedBy: ref("User"),
+    approvedAt: Date,
     data: {
       name: String,
       email: String,

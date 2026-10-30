@@ -77,7 +77,7 @@ export function Applications() {
       });
       setToast(
         action === "APPROVED"
-          ? "Provider approved. The active, available profile can now appear in its city and category."
+          ? "Provider approved successfully."
           : action === "REJECTED"
             ? "Provider rejected and hidden from booking."
             : "Application updated.",
@@ -217,8 +217,8 @@ export function Applications() {
                   <div className="gs-applications__notice" role="status">
                     {a.approvalReadiness.ready ? (
                       <p>
-                        Supporting document and identity review checks are
-                        complete. Record your decision below.
+                        Ready for an administrator decision. Service details can
+                        be completed after approval.
                       </p>
                     ) : (
                       <div>
@@ -229,8 +229,9 @@ export function Applications() {
                           ))}
                         </ul>
                         <p>
-                          Complete the basic service profile before approval.
-                          Documents and identity images are optional.
+                          Approval requires an existing real-provider
+                          application. Documents and complete service details
+                          are not required.
                         </p>
                       </div>
                     )}
@@ -283,7 +284,8 @@ export function Applications() {
                 {(a.user || a.followUpConsent) && (
                   <div className="gs-applications__decision">
                     <label htmlFor={`review-${a._id}`}>
-                      Decision or follow-up note <span>10–500 characters</span>
+                      Decision or follow-up note{" "}
+                      <span>Optional for approval or rejection</span>
                     </label>
                     <textarea
                       id={`review-${a._id}`}
@@ -433,6 +435,19 @@ export function ProviderApplicationStatus() {
           : "An administrator approves your basic service profile before it appears in search. No documents or identity images are required."}
       </p>
       {error && <p role="alert">{error}</p>}
+      {user.profile.status === "APPROVED" &&
+        application?.discoveryReadiness &&
+        !application.discoveryReadiness.ready && (
+          <div role="status">
+            <p>Complete service details to appear in searches.</p>
+            <Link
+              className="btn small"
+              to="/dashboard/provider?section=profile"
+            >
+              Complete service details
+            </Link>
+          </div>
+        )}
       <Link
         className="btn light small"
         to="/dashboard/provider?section=profile"

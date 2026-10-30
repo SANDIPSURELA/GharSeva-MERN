@@ -1,9 +1,12 @@
 // Actual policy/middleware over mocked catalog reads; no MongoDB or delivery.
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { providerApprovalRequirements } from "../src/provider-identity.js";
+import {
+  providerApprovalRequirements,
+  providerDiscoveryReadiness,
+} from "../src/provider-approval.js";
 import { adminReview, requireRecentAdmin } from "../src/auth.js";
-import { Category } from "../src/models.js";
+
 const user = () => ({
   _id: "0123456789abcdef01234567",
   name: "Fixture Provider",
@@ -22,38 +25,73 @@ const user = () => ({
     documents: [],
   },
 });
-test("ordinary approval needs a complete active service profile, not documents or identity proof", async () => {
-  const read = mock.method(Category, "exists", async () => ({
-    _id: "fixture-category",
-  }));
-  try {
-    const u = user(),
-      before = JSON.stringify(u);
+test("admin approval eligibility is independent of optional profile, cities, price, experience and account availability", async () => {
+  for (const change of [
+    (u) => (u.profile = {}),
+    (u) => (u.city = ""),
+    (u) => {
+      u.city = "Surat";
+      u.profile.city = "Ahmedabad";
+    },
+    (u) => (u.status = "SUSPENDED"),
+    (u) => (u.profile.price = undefined),
+    (u) => (u.profile.bio = ""),
+    (u) => (u.profile.experience = undefined),
+    (u) => (u.profile.documents = []),
+  ]) {
+    const u = user();
+    change(u);
+    const before = JSON.stringify(u);
     assert.deepEqual(await providerApprovalRequirements(u), {
       ready: true,
       issues: [],
     });
     assert.equal(JSON.stringify(u), before);
-    for (const alter of [
-      (u) => (u.role = "customer"),
-      (u) => (u.status = "SUSPENDED"),
-      (u) => (u.mobile = ""),
-      (u) => (u.city = "unknown"),
-      (u) => (u.profile.bio = ""),
-      (u) => (u.profile.price = 1),
-      (u) => (u.profile.area = ""),
-      (u) => (u.demoAccountId = "owner-demo:ahm-plumbing-1"),
-    ]) {
-      const v = user();
-      alter(v);
-      assert.equal((await providerApprovalRequirements(v)).ready, false);
-    }
-    read.mock.mockImplementation(async () => null);
-    assert.equal((await providerApprovalRequirements(user())).ready, false);
-  } finally {
-    read.mock.restore();
   }
+  for (const u of [
+    null,
+    { ...user(), role: "customer" },
+    { ...user(), demoAccountId: "owner-demo:ahm-plumbing-1" },
+  ])
+    assert.equal((await providerApprovalRequirements(u)).ready, false);
 });
+test("discovery requires actual booking data, independently of approval and account-city matching", () => {
+  const u = user();
+  u.profile.status = "APPROVED";
+  u.profile.available = true;
+  u.profile.days = [1, 2];
+  u.profile.slots = ["09:00"];
+  const cats = [{ slug: "plumbing", enabled: true }];
+  u.city = "Surat";
+  u.profile.area = "";
+  u.profile.bio = "";
+  u.profile.experience = undefined;
+  assert.equal(providerDiscoveryReadiness(u, cats).ready, true);
+  u.profile.city = "  Ahemdabad ";
+  assert.equal(providerDiscoveryReadiness(u, cats).ready, true);
+  for (const change of [
+    (u) => (u.profile.price = undefined),
+    (u) => (u.profile.city = ""),
+    (u) => (u.profile.category = "unknown"),
+    (u) => (u.profile.days = []),
+    (u) => (u.profile.slots = []),
+    (u) => (u.profile.price = 123.456),
+    (u) => (u.status = "SUSPENDED"),
+    (u) => (u.profile.status = "PENDING"),
+    (u) => (u.demoAccountId = "owner-demo:ahm-plumbing-1"),
+  ]) {
+    const v = structuredClone(u);
+    change(v);
+    const r = providerDiscoveryReadiness(v, cats);
+    assert.equal(r.ready, false);
+    assert.equal(r.message, "Complete service details to appear in searches.");
+  }
+  assert.equal(
+    providerDiscoveryReadiness(u, [{ slug: "plumbing", enabled: false }]).ready,
+    false,
+  );
+});
+
 test("ordinary admin reviews reuse verified login proof; sensitive actions retain short-lived proof", () => {
   const req = {
     user: { role: "admin", loginRevision: 7 },

@@ -327,7 +327,7 @@ async function login(email, password) {
   assert.equal(result.status, 200, JSON.stringify(result.data));
   return result;
 }
-let customerAuth, providerAuth, realCustomer, bookingId;
+let customerAuth, providerAuth, realCustomer, bookingId, approvalAdminAuth;
 test("canonical city validation uses the existing catalogue, aliases and whitespace", () => {
   for (const city of ["Ahmedabad", " aHeMdAbAd ", " AHEMDABAD "])
     assert.equal(requireCity(city), "Ahmedabad");
@@ -808,22 +808,38 @@ test("simple provider approval needs no documents, reuses admin proof and reject
   assert.equal(p.profile.documents.length, 0);
   assert.equal(p.profile.identityRequired, false);
   const admin = await login("admin@gharseva.com", "Admin12345");
+  approvalAdminAuth = admin;
+  const pro = await login(p.email, "ProviderCity123");
+  p.city = "Surat";
+  p.profile.city = "";
+  p.profile.category = "";
+  p.profile.categories = [];
+  p.profile.area = "";
+  p.profile.bio = "";
+  p.profile.price = undefined;
+  p.profile.experience = undefined;
+  p.profile.photo = "";
+  p.profile.days = [];
+  p.profile.slots = [];
+  p.profile.available = false;
   const session = tables
     .get(models.AuthSession)
     .find((s) => s.context === admin.context);
   session.reauthenticatedAt = new Date(Date.now() - 6 * 60000);
   const application = await models.ProviderApplication.findOne({ user: p._id });
-  const decide = (auth, action = "APPROVED", revision = application.revision) =>
+  const decide = (
+    auth,
+    action = "APPROVED",
+    revision = application.revision,
+    note,
+  ) =>
     call("/admin/applications/" + application._id, {
       ...auth,
       method: "PATCH",
-      body: { action, revision },
+      body: { action, revision, note },
     });
   assert.equal((await decide(customerAuth)).status, 403);
-  assert.equal(
-    (await decide(await login(p.email, "ProviderCity123"))).status,
-    403,
-  );
+  assert.equal((await decide(pro)).status, 403);
   assert.equal((await decide({})).status, 401);
   const waiting = await call("/admin/applications", admin);
   assert.equal(waiting.status, 200, JSON.stringify(waiting.data));
@@ -872,12 +888,62 @@ test("simple provider approval needs no documents, reuses admin proof and reject
     (await decide(admin, "REJECTED", application.revision - 1)).status,
     409,
   );
+  const approvedAt = p.profile.approvedAt.getTime(),
+    approvedBy = String(p.profile.approvedBy),
+    historyLength = application.history.length,
+    revision = application.revision;
+  const repeat = await decide(admin, "APPROVED", revision - 1);
+  assert.equal(repeat.status, 200);
+  assert.equal(repeat.data.idempotent, true);
+  assert.equal(
+    (
+      await call("/admin/users/" + p._id, {
+        ...admin,
+        method: "PATCH",
+        body: { approval: "APPROVED" },
+      })
+    ).status,
+    200,
+  );
+  assert.equal(application.history.length, historyLength);
+  assert.equal(application.revision, revision);
+  assert.equal(p.profile.approvedAt.getTime(), approvedAt);
+  assert.equal(String(p.profile.approvedBy), approvedBy);
+  assert.equal(String(application.approvedBy), approvedBy);
+  assert.equal(application.approvedAt.getTime(), approvedAt);
   assert.ok(
-    (await call("/providers?city=Ahemdabad&category=plumbing")).data.some(
+    !(await call("/providers?city=Ahmedabad&category=plumbing")).data.some(
       (u) => u._id === String(p._id),
     ),
   );
-  assert.equal((await decide(admin, "REJECTED")).status, 200);
+  const own = await call("/provider/application", pro);
+  assert.equal(
+    own.data.discoveryReadiness.message,
+    "Complete service details to appear in searches.",
+  );
+  p.profile.category = "plumbing";
+  p.profile.categories = ["plumbing"];
+  p.profile.city = "Ahmedabad";
+  assert.equal(
+    (
+      await call("/bookings", {
+        ...customerAuth,
+        body: {
+          providerId: String(p._id),
+          category: "plumbing",
+          city: "Ahmedabad",
+          date: indiaDate(8),
+          time: "14:00",
+          address: "42 Fixture Address, Ahmedabad",
+        },
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await decide(admin, "REJECTED", application.revision, "x")).status,
+    200,
+  );
   assert.equal(p.profile.status, "REJECTED");
   assert.ok(
     !(await call("/providers?city=Ahmedabad&category=plumbing")).data.some(
@@ -901,7 +967,108 @@ test("simple provider approval needs no documents, reuses admin proof and reject
     ).status,
     403,
   );
+  const completed = await call("/auth/me", {
+    ...pro,
+    method: "PATCH",
+    body: {
+      name: p.name,
+      email: p.email,
+      mobile: p.mobile,
+      city: "Ahmedabad",
+      profile: {
+        category: "plumbing",
+        categories: ["plumbing"],
+        city: "Ahmedabad",
+        area: "Satellite",
+        bio: "A complete plumbing service profile for the isolated booking demonstration.",
+        price: 399,
+        experience: 0,
+        available: true,
+        days: [0, 1, 2, 3, 4, 5, 6],
+        slots: ["09:00", "11:00", "14:00", "16:00"],
+      },
+    },
+  });
+  assert.equal(completed.status, 200, JSON.stringify(completed.data));
+  assert.equal(p.profile.status, "APPROVED");
+  assert.ok(
+    (await call("/providers?city=Ahemdabad&category=plumbing")).data.some(
+      (u) => u._id === String(p._id),
+    ),
+  );
   assert.equal(p.status, "ACTIVE");
+});
+
+test("both admin approval paths serialize concurrent decisions and recover a partial application write without duplicate audit", async () => {
+  const p = await User.findOne({ email: "new.city.provider@example.com" });
+  const application = await models.ProviderApplication.findOne({ user: p._id });
+  const admin = approvalAdminAuth;
+  p.profile.status = "PENDING";
+  application.state = "SUBMITTED";
+  const revision = application.revision,
+    historyLength = application.history.length;
+  const original = models.ProviderApplication.findOneAndUpdate;
+  const failFinish = mock.method(
+    models.ProviderApplication,
+    "findOneAndUpdate",
+    (filter, update, options) => {
+      if (update.$set?.state === "APPROVED")
+        throw Error("Isolated fixture application persistence failure");
+      return original(filter, update, options);
+    },
+  );
+  const approve = () =>
+    call("/admin/applications/" + application._id, {
+      ...admin,
+      method: "PATCH",
+      body: { action: "APPROVED", revision },
+    });
+  try {
+    assert.equal((await approve()).status, 500);
+    assert.equal(p.profile.status, "APPROVED");
+    assert.equal(application.state, "SUBMITTED");
+    assert.equal(application.reviewLockUntil, undefined);
+    assert.equal(application.history.length, historyLength);
+  } finally {
+    failFinish.mock.restore();
+  }
+  const at = p.profile.approvedAt.getTime();
+  assert.equal((await approve()).status, 200);
+  assert.equal(application.state, "APPROVED");
+  assert.equal(application.history.length, historyLength + 1);
+  assert.equal(p.profile.approvedAt.getTime(), at);
+  assert.equal((await approve()).data.idempotent, true);
+  assert.equal(application.history.length, historyLength + 1);
+  p.profile.status = "PENDING";
+  application.state = "SUBMITTED";
+  const before = application.history.length,
+    current = application.revision;
+  const results = await Promise.all([
+    call("/admin/applications/" + application._id, {
+      ...admin,
+      method: "PATCH",
+      body: { action: "APPROVED", revision: current },
+    }),
+    call("/admin/users/" + p._id, {
+      ...admin,
+      method: "PATCH",
+      body: { approval: "REJECTED", note: "No" },
+    }),
+  ]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  assert.equal(application.history.length, before + 1);
+  assert.equal(application.state, p.profile.status);
+  assert.equal(
+    (
+      await call("/admin/users/" + p._id, {
+        ...admin,
+        method: "PATCH",
+        body: { approval: "APPROVED" },
+      })
+    ).status,
+    200,
+  );
+  assert.equal(p.profile.status, "APPROVED");
 });
 
 test("one full isolated booking journey retains provider ownership, admin read access, OTP and two distinct simulated collections", async () => {

@@ -166,7 +166,11 @@ export function Dashboard() {
       const data = await api(path, { method, body });
       await reload(true);
       await refresh();
-      setToast("Changes saved.");
+      setToast(
+        body?.approval === "APPROVED"
+          ? "Provider approved successfully."
+          : "Changes saved.",
+      );
       return data;
     } catch (e) {
       setError(e.message);
@@ -481,6 +485,19 @@ export function Dashboard() {
           )}
         </div>
         <ErrorBox message={error} />
+        {user.role === "provider" &&
+          user.profile.status === "APPROVED" &&
+          user.discoveryReadiness?.ready === false && (
+            <div className="approval-banner" role="status">
+              <p>Complete service details to appear in searches.</p>
+              <Link
+                className="btn small light"
+                to="/dashboard/provider?section=profile"
+              >
+                Complete service details
+              </Link>
+            </div>
+          )}
         {user.role === "provider" &&
           user.profile.status !== "APPROVED" &&
           section !== "verification" && (

@@ -7,14 +7,7 @@ import {
 import multer from "multer";
 import mongoose from "mongoose";
 import { rateLimit } from "express-rate-limit";
-import {
-  File,
-  User,
-  ProviderIdentity,
-  ProviderApplication,
-  Category,
-} from "./models.js";
-import { canonicalCity } from "../../shared/cities.js";
+import { File, User, ProviderIdentity, ProviderApplication } from "./models.js";
 import { auth, role, adminReview } from "./auth.js";
 import { ownerImportedDemo } from "./faculty-showcase.js";
 import { fail, text } from "./domain.js";
@@ -81,50 +74,7 @@ function decryptIdentity(file) {
     );
   }
 }
-// Admin profile approval is independent of optional historical identity records.
-export async function providerApprovalRequirements(user) {
-  const issues = [];
-  if (!user || user.role !== "provider")
-    issues.push("No provider account is attached to this application.");
-  else if (ownerImportedDemo(user))
-    issues.push(
-      "Fictional Faculty Demo profiles cannot be approved as real professionals.",
-    );
-  else if (user.status !== "ACTIVE")
-    issues.push("The provider account must be active before approval.");
-  if (!issues.length) {
-    const p = user.profile || {};
-    if (
-      !user.name?.trim() ||
-      !user.email ||
-      !/^[6-9]\d{9}$/.test(user.mobile || "")
-    )
-      issues.push("Complete the provider's name, email and mobile number.");
-    if (
-      !canonicalCity(user.city) ||
-      canonicalCity(user.city) !== canonicalCity(p.city)
-    )
-      issues.push("Choose a supported matching account and service city.");
-    if (
-      !p.area ||
-      p.area.trim().length < 3 ||
-      !p.bio ||
-      p.bio.trim().length < 30 ||
-      !Number.isFinite(p.price) ||
-      p.price < 100 ||
-      p.price > 50000
-    )
-      issues.push(
-        "Complete the service area, description and valid starting price.",
-      );
-    if (
-      !p.category ||
-      !(await Category.exists({ slug: p.category, enabled: true }))
-    )
-      issues.push("Choose an enabled service category.");
-  }
-  return { ready: !issues.length, issues };
-}
+export { providerApprovalRequirements } from "./provider-approval.js";
 export async function identityApprovalGuard(user) {
   if (ownerImportedDemo(user))
     fail(

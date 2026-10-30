@@ -1,3 +1,7 @@
+import {
+  providerDiscoveryReadiness,
+  reviewProviderApplication,
+} from "./provider-approval.js";
 import { requireCity, cityFilter, bookingCity } from "./cities.js";
 import {
   mountFacultyShowcase,
@@ -164,7 +168,9 @@ export async function publicProviders(
     ],
     ...filter,
   }).lean();
-  const realUsers = users.filter((u) => !ownerImportedDemo(u));
+  const realUsers = users.filter(
+    (u) => providerDiscoveryReadiness(u, cats).ready,
+  );
   const ids = realUsers.map((x) => x._id);
   const [ratings, jobs, portfolioFiles] = await Promise.all([
     Review.aggregate([
@@ -239,7 +245,7 @@ export async function createCustomerBooking(user, input, extra = {}) {
     role: "provider",
     status: "ACTIVE",
     "profile.status": "APPROVED",
-  });
+  }).lean();
   if (!provider) fail(404, "Provider not available.");
   if (ownerImportedDemo(provider))
     fail(
@@ -258,6 +264,11 @@ export async function createCustomerBooking(user, input, extra = {}) {
     ].includes(cat.slug)
   )
     fail(400, "This provider does not offer the selected service.");
+  if (!providerDiscoveryReadiness(provider, [cat]).ready)
+    fail(
+      409,
+      "This provider must complete service details before accepting new bookings.",
+    );
   const city = bookingCity(user, input, provider);
   validateSchedule(input.date, input.time, provider.profile);
   if (!["STANDARD", "PRIORITY"].includes(input.urgency || "STANDARD"))
@@ -632,7 +643,19 @@ export function createApp({
     sendLoginCode: identityServices.deliverCode,
     purpose: "admin_reauth",
   });
-  app.get("/api/auth/me", auth, (req, res) => res.json(safeUser(req.user)));
+  app.get("/api/auth/me", auth, async (req, res) =>
+    res.json({
+      ...safeUser(req.user),
+      ...(req.user.role === "provider"
+        ? {
+            discoveryReadiness: providerDiscoveryReadiness(
+              await User.findById(req.user._id).lean(),
+              await Category.find({ enabled: true }).lean(),
+            ),
+          }
+        : {}),
+    }),
+  );
   app.patch(
     "/api/auth/me/city",
     auth,
@@ -1101,6 +1124,9 @@ export function createApp({
       users: await Promise.all(
         users.map(async (u) => ({
           ...safeUser(u),
+          ...(u.role === "provider"
+            ? { discoveryReadiness: providerDiscoveryReadiness(u, categories) }
+            : {}),
           ...(u.role === "provider" && u.profile.status !== "APPROVED"
             ? { approvalReadiness: await providerApprovalRequirements(u) }
             : {}),
@@ -1126,33 +1152,40 @@ export function createApp({
     const u = await User.findById(id(req.params.id));
     if (!u || u.role === "admin")
       fail(400, "Administrator accounts cannot be changed here.");
-    const originalStatus = u.status,
-      originalApproval = u.profile?.status;
-    if (req.body.status !== undefined) {
-      if (!["ACTIVE", "SUSPENDED"].includes(req.body.status))
-        fail(400, "Invalid account status.");
-    }
+    const originalStatus = u.status;
+    if (
+      req.body.status !== undefined &&
+      !["ACTIVE", "SUSPENDED"].includes(req.body.status)
+    )
+      fail(400, "Invalid account status.");
     if (req.body.approval !== undefined) {
+      if (req.body.status !== undefined)
+        fail(
+          400,
+          "Change account access separately from application approval.",
+        );
       if (
         u.role !== "provider" ||
         !["APPROVED", "REJECTED", "PENDING"].includes(req.body.approval)
       )
         fail(400, "Invalid provider approval.");
-      if (req.body.approval === "APPROVED") {
-        if ((req.body.status || u.status) !== "ACTIVE")
-          fail(409, "The provider account must be active before approval.");
-        const readiness = await providerApprovalRequirements(u);
-        if (!readiness.ready) fail(409, readiness.issues.join(" "));
-      }
+      const result = await reviewProviderApplication({
+        providerId: u._id,
+        action:
+          req.body.approval === "PENDING"
+            ? "NEEDS_CORRECTION"
+            : req.body.approval,
+        note:
+          req.body.note ||
+          (req.body.approval === "PENDING"
+            ? "Administrator requested profile changes."
+            : undefined),
+        actor: req.user._id,
+      });
+      return res.json(safeUser(result.user));
     }
     const changes = {};
     if (req.body.status !== undefined) changes.status = req.body.status;
-    if (req.body.approval !== undefined)
-      changes["profile.status"] = req.body.approval;
-    if (req.body.approval === "APPROVED") {
-      changes["profile.approvedBy"] = req.user._id;
-      changes["profile.approvedAt"] = new Date();
-    }
     if (!Object.keys(changes).length) return res.json(safeUser(u));
     const filter = {
       _id: u._id,
@@ -1160,9 +1193,6 @@ export function createApp({
       role: u.role,
       status: originalStatus,
       ...(u.updatedAt ? { updatedAt: u.updatedAt } : {}),
-      ...(req.body.approval !== undefined
-        ? { "profile.status": originalApproval }
-        : {}),
     };
     const updated = await User.findOneAndUpdate(
       filter,
@@ -1178,24 +1208,6 @@ export function createApp({
       fail(
         409,
         "The account changed during review. Refresh before recording a decision.",
-      );
-    if (req.body.approval !== undefined)
-      await ProviderApplication.updateOne(
-        { user: u._id },
-        {
-          $set: {
-            state:
-              req.body.approval === "PENDING" ? "SUBMITTED" : req.body.approval,
-          },
-          $inc: { revision: 1 },
-          $push: {
-            history: {
-              action: req.body.approval,
-              note: "Administrator updated the provider approval from the account panel.",
-              actor: req.user._id,
-            },
-          },
-        },
       );
     res.json(safeUser(updated));
   });

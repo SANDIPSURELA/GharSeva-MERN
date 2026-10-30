@@ -6,10 +6,15 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import mongoose from "mongoose";
-import { providerApprovalRequirements } from "./provider-identity.js";
+import {
+  providerApprovalRequirements,
+  providerDiscoveryReadiness,
+  reviewProviderApplication,
+} from "./provider-approval.js";
 import bcrypt from "bcryptjs";
 import { rateLimit } from "express-rate-limit";
 import {
+  Category,
   ContactChallenge,
   ContactThrottle,
   RegistrationSession,
@@ -832,106 +837,14 @@ export function mountRegistration(
         fail(404, "Application not found.");
       if (!Number.isInteger(req.body.revision) || req.body.revision < 0)
         fail(400, "Refresh the application before recording a decision.");
-      const defaultNote = ["APPROVED", "REJECTED"].includes(req.body.action)
-        ? `Administrator ${req.body.action.toLowerCase()} the service profile; documents are optional.`
-        : "";
-      const note = text(
-        req.body.note?.trim() || defaultNote,
-        "Review note",
-        10,
-        500,
-      );
-      const a = await ProviderApplication.findOneAndUpdate(
-        {
-          _id: req.params.id,
-          revision: req.body.revision,
-          $or: [
-            { reviewLockUntil: { $exists: false } },
-            { reviewLockUntil: { $lte: new Date() } },
-          ],
-        },
-        { $set: { reviewLockUntil: new Date(Date.now() + 30000) } },
-        { returnDocument: "after" },
-      );
-      if (!a)
-        fail(
-          409,
-          "This application changed or is being reviewed. Refresh before recording a decision.",
-        );
-      try {
-        if (a.expiresAt && a.expiresAt <= new Date())
-          fail(404, "Application not found.");
-        const action = req.body.action;
-        if (action === "FOLLOW_UP") {
-          if (!a.followUpConsent)
-            fail(403, "This applicant has not permitted staff follow-up.");
-        } else {
-          if (
-            !["APPROVED", "REJECTED", "NEEDS_CORRECTION"].includes(action) ||
-            a.state === "DRAFT" ||
-            !a.user
-          )
-            fail(400, "Only submitted applications can be reviewed.");
-          const user = await User.findById(a.user);
-          if (!user || user.role !== "provider")
-            fail(404, "Professional account not found.");
-          if (action === "APPROVED") {
-            const readiness = await providerApprovalRequirements(user);
-            if (!readiness.ready) fail(409, readiness.issues.join(" "));
-          }
-          const changed = await User.findOneAndUpdate(
-            {
-              _id: user._id,
-              name: user.name,
-              role: "provider",
-              status: user.status,
-              ...(user.updatedAt ? { updatedAt: user.updatedAt } : {}),
-              "profile.status": user.profile.status,
-            },
-            {
-              $set: {
-                "profile.status":
-                  action === "APPROVED"
-                    ? "APPROVED"
-                    : action === "REJECTED"
-                      ? "REJECTED"
-                      : "PENDING",
-                ...(action === "APPROVED"
-                  ? {
-                      "profile.approvedBy": req.user._id,
-                      "profile.approvedAt": new Date(),
-                    }
-                  : {}),
-              },
-            },
-          );
-          if (!changed)
-            fail(
-              409,
-              "The account changed during review. Refresh before recording a decision.",
-            );
-        }
-        const updated = await ProviderApplication.findOneAndUpdate(
-          { _id: a._id, revision: a.revision },
-          {
-            ...(action === "FOLLOW_UP" ? {} : { $set: { state: action } }),
-            $inc: { revision: 1 },
-            $push: { history: { action, note, actor: req.user._id } },
-          },
-          { returnDocument: "after" },
-        );
-        if (!updated)
-          fail(
-            409,
-            "Another reviewer changed this application. Refresh to see its current state.",
-          );
-      } finally {
-        await ProviderApplication.updateOne(
-          { _id: a._id },
-          { $unset: { reviewLockUntil: "" } },
-        );
-      }
-      res.json({ ok: true });
+      const result = await reviewProviderApplication({
+        applicationId: req.params.id,
+        revision: req.body.revision,
+        action: req.body.action,
+        note: req.body.note,
+        actor: req.user._id,
+      });
+      res.json({ ok: true, idempotent: result.idempotent });
     },
   );
   app.get(
@@ -940,18 +853,19 @@ export function mountRegistration(
     role("provider"),
     async (req, res) => {
       const a = await ProviderApplication.findOne({ user: req.user._id });
-      res.json(
-        a
-          ? {
-              state: a.state,
-              history: a.history.map((h) => ({
-                action: h.action,
-                note: h.note,
-                at: h.at,
-              })),
-            }
-          : null,
+      const discoveryReadiness = providerDiscoveryReadiness(
+        await User.findById(req.user._id).lean(),
+        await Category.find({ enabled: true }).lean(),
       );
+      res.json({
+        state: a?.state || req.user.profile?.status,
+        history: (a?.history || []).map((h) => ({
+          action: h.action,
+          note: h.note,
+          at: h.at,
+        })),
+        discoveryReadiness,
+      });
     },
   );
 }
